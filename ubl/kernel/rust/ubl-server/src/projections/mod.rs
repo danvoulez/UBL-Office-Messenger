@@ -10,11 +10,13 @@
 
 mod jobs;
 mod messages;
+mod office;
 mod rebuild;
 pub mod routes;
 
 pub use jobs::JobsProjection;
 pub use messages::MessagesProjection;
+pub use office::OfficeProjection;
 pub use rebuild::rebuild_projections;
 pub use routes::{projection_router, ProjectionState};
 

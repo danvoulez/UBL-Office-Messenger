@@ -1,0 +1,28 @@
+{
+  "container": "C.Office",
+  "pacts": [
+    {
+      "pact_id": "office-constitution-update",
+      "description": "Updating entity constitution requires guardian approval",
+      "min_signers": 2,
+      "signers": ["guardian", "admin"],
+      "applies_to": {
+        "event_types": ["constitution.updated"],
+        "intent_classes": ["observation"]
+      },
+      "expires_after_ms": 86400000
+    },
+    {
+      "pact_id": "office-entity-suspend",
+      "description": "Suspending an entity requires guardian approval",
+      "min_signers": 2,
+      "signers": ["guardian", "admin"],
+      "applies_to": {
+        "event_types": ["entity.suspended"],
+        "intent_classes": ["observation"]
+      },
+      "expires_after_ms": 3600000
+    }
+  ]
+}
+

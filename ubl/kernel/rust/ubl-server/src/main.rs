@@ -348,6 +348,11 @@ async fn route_commit(
                             if let Err(e) = projection.process_event(event_type, &atom, &entry_hash, sequence).await {
                                 error!("Failed to update messages projection: {}", e);
                             }
+                        } else if container_id == "C.Office" {
+                            let projection = projections::OfficeProjection::new(pool);
+                            if let Err(e) = projection.process_event(event_type, &atom, &entry_hash, sequence).await {
+                                error!("Failed to update office projection: {}", e);
+                            }
                         }
                     });
                 }
@@ -558,7 +563,7 @@ async fn main() -> anyhow::Result<()> {
     info!("   Database: {}", database_url.split('@').last().unwrap_or("postgres"));
     info!("   Console v1.1: /v1/policy/permit, /v1/commands/issue, /v1/exec.finish");
     info!("   Registry v1.1: /v1/query/registry/*");
-    info!("   Projections: /query/jobs, /query/conversations/:id/messages");
+    info!("   Projections: /query/jobs, /query/conversations/:id/messages, /query/office/*");
     info!("   Runner pulls from: GET /v1/query/commands?pending=1");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

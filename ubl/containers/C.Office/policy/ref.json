@@ -1,0 +1,45 @@
+{
+  "container": "C.Office",
+  "policy": {
+    "version": 1,
+    "default_risk_level": "L2",
+    "rules": [
+      {
+        "name": "entity-creation",
+        "event_type": "entity.created",
+        "risk_level": "L3",
+        "requires": ["valid_asc", "admin_approval"]
+      },
+      {
+        "name": "constitution-update",
+        "event_type": "constitution.updated",
+        "risk_level": "L4",
+        "requires": ["valid_asc", "pact:office-constitution-update"]
+      },
+      {
+        "name": "entity-suspend",
+        "event_type": "entity.suspended",
+        "risk_level": "L4",
+        "requires": ["valid_asc", "pact:office-entity-suspend"]
+      },
+      {
+        "name": "session-events",
+        "event_type_prefix": "session.",
+        "risk_level": "L1",
+        "requires": ["valid_asc"]
+      },
+      {
+        "name": "audit-events",
+        "event_type_prefix": "audit.",
+        "risk_level": "L1",
+        "requires": ["valid_asc"]
+      }
+    ],
+    "asc_scopes": {
+      "allowed_intents": ["observation"],
+      "max_physics_delta": 0,
+      "forbidden_events": ["entity.archived"]
+    }
+  }
+}
+
