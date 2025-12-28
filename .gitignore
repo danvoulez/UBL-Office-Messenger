@@ -54,6 +54,7 @@ out/
 # Private keys - NEVER commit these
 *.key
 *.pem
+runner.key
 *.p12
 *.pfx
 id_rsa*

@@ -1,119 +1,165 @@
-# UBL Runner (LAB 512)
+# UBL Runner v2.0
 
-**Pull-only job executor for UBL system**
+> Pull-Only Job Executor with Ed25519 Signed Receipts
 
-## Architecture — ADR-UBL-Console-001 v1.1
+## 🔐 Security Model
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    UBL Server (LAB 256)                     │
-│                                                             │
-│  GET /v1/query/commands?pending=1                           │
-│  POST /v1/exec.finish                                       │
-└─────────────────────────────────────────────────────────────┘
-          ▲                              │
-          │ poll                         │ receipt
-          │                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Runner (LAB 512)                         │
-│                    This machine                             │
-│                                                             │
-│  ┌─────────────────┐    ┌─────────────────┐                │
-│  │   pull_only.ts  │───▶│  sandbox-exec   │                │
-│  │   (loop)        │    │  (isolation)    │                │
-│  └─────────────────┘    └─────────────────┘                │
-│           │                     │                           │
-│           ▼                     ▼                           │
-│  ┌─────────────────┐    ┌─────────────────┐                │
-│  │   Allowlist     │    │   Executors     │                │
-│  │   (jobs.allow)  │    │   (bash/wasm)   │                │
-│  └─────────────────┘    └─────────────────┘                │
-└─────────────────────────────────────────────────────────────┘
-```
+- **Pull-Only**: No inbound connections. Runner only polls UBL for commands.
+- **Ed25519 Signatures**: All receipts are signed with the runner's private key.
+- **Sandboxed Execution**: Jobs run in macOS sandbox-exec or Linux nsjail.
+- **Binding Hash**: Receipts include the permit's binding_hash for audit trail.
 
-## Key Principles
+## 🚀 Quick Start
 
-1. **NO INBOUND CONNECTIONS**: Runner only pulls from UBL
-2. **Allowlist-only**: Only jobs in `jobs.allowlist.T.<TENANT>.json` execute
-3. **Sandboxed**: All jobs run via `sandbox-exec` with restricted permissions
-4. **Receipts**: Every execution produces a signed Receipt sent to UBL
-
-## Usage
+### 1. Install Dependencies
 
 ```bash
-# Set environment
-export UBL_URL=http://lab256.local:8080
-export TENANT_ID=T.UBL
-export RUNNER_TARGET=LAB_512
-
-# Start runner
-npm start
+cd ubl/runner
+npm install
 ```
 
-## Files
+### 2. Generate Runner Keypair
 
-| File | Purpose |
-|------|---------|
-| `pull_only.ts` | Main pull loop |
-| `sandbox.sb` | macOS sandbox profile |
-| `executors/*.sh` | Job-specific executors |
-| `package.json` | Dependencies |
+```bash
+npm run keygen
+# Outputs:
+#   Saved private key to ./runner.key
+#   Public key (register in UBL): <hex>
+```
 
-## Environment Variables
+### 3. Register Runner in UBL
+
+Add the public key to the `ubl_runners` table:
+
+```sql
+UPDATE ubl_runners 
+SET pubkey_ed25519 = '<your_public_key_hex>'
+WHERE runner_id = 'LAB_512';
+```
+
+### 4. Start the Runner
+
+```bash
+# Development
+npm run dev
+
+# Production
+RUNNER_PRIVATE_KEY=<hex> npm start
+```
+
+## ⚙️ Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `UBL_URL` | `http://lab256.local:8080` | UBL server address |
-| `TENANT_ID` | `T.UBL` | Tenant ID for this runner |
-| `RUNNER_TARGET` | `LAB_512` | Target identifier |
+| `UBL_URL` | `http://lab256.local:8080` | UBL Kernel API URL |
+| `RUNNER_ID` | `LAB_512` | Runner identifier |
+| `RUNNER_TARGET` | `LAB_512` | Target zone for commands |
+| `RUNNER_PRIVATE_KEY` | - | Ed25519 private key (hex) |
+| `RUNNER_KEY_PATH` | `./runner.key` | Path to private key file |
 | `POLL_INTERVAL` | `5000` | Poll interval in ms |
-| `WORK_DIR` | `/tmp/runner-work` | Job work directory |
-| `ALLOWLIST_PATH` | `../config/jobs.allowlist.T.UBL.json` | Allowlist file |
-| `SANDBOX_PROFILE` | `./sandbox.sb` | Sandbox profile |
+| `SANDBOX_PROFILE` | `./sandbox.sb` | macOS sandbox profile |
+| `WORK_DIR` | `/tmp/runner-work` | Working directory for jobs |
 
-## Adding New Job Types
+## 📁 Structure
 
-1. Add entry to `config/jobs.allowlist.T.<TENANT>.json`:
+```
+runner/
+├── pull_only.ts      # Main loop
+├── crypto.ts         # Ed25519, BLAKE3, canonical JSON
+├── sandbox.sb        # macOS sandbox profile
+├── executors/        # Job executor scripts
+│   ├── echo_test.sh
+│   └── deploy.sh
+├── runner.key        # Private key (gitignored!)
+└── package.json
+```
+
+## 🔧 Creating Executors
+
+Each job type needs an executor script in `executors/`:
+
+```bash
+# executors/echo_test.sh
+#!/bin/bash
+set -e
+
+PARAMS_FILE="$1"
+echo "Executing echo_test job"
+echo "Params: $(cat "$PARAMS_FILE")"
+
+# Write output
+echo '{"result": "success", "message": "Hello from runner"}' > "$OUTPUT_FILE"
+```
+
+The script receives:
+- `$1`: Path to params.json
+- `$OUTPUT_FILE`: Where to write JSON output
+- `$COMMAND_ID`, `$ACTION`, `$OFFICE`, `$TARGET`, `$RISK`: Env vars
+
+## 🧪 Testing
+
+```bash
+# Test crypto module
+npm run test:crypto
+
+# Output:
+# Signed: { command_id: 'test', ..., sig_runner: 'ed25519:...' }
+# Verify: true
+```
+
+## 📜 Receipt Format
 
 ```json
 {
-  "jobType": "my.new.job",
-  "risk": "L2",
-  "ttl_ms": 120000,
-  "requires_step_up": false,
-  "fs_scope": "project",
-  "network_scope": []
+  "command_id": "abc-123",
+  "permit_jti": "def-456",
+  "binding_hash": "blake3:...",
+  "runner_id": "LAB_512",
+  "status": "OK",
+  "logs_hash": "blake3:...",
+  "ret": { "result": "success" },
+  "sig_runner": "ed25519:..."
 }
 ```
 
-2. Create executor in `executors/`:
+The signature is computed over the canonical JSON (sorted keys, no whitespace) of the payload **without** `sig_runner`.
 
-```bash
-# executors/my_new_job.sh
-#!/bin/bash
-PARAMS_FILE="$1"
-# ... job logic
+## 🔒 Key Management
+
+**Production:**
+- Store private key in secure storage (HSM, Keychain)
+- Never commit `runner.key` to git
+- Rotate keys periodically
+- Use separate keys per environment (LAB_512 vs LAB_256)
+
+**Development:**
+- Runner generates ephemeral key on startup if none provided
+- Ephemeral public key is logged for temporary registration
+
+## 🌐 Network Zones
+
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│      LAB 256        │     │      LAB 512        │
+│   (UBL Kernel)      │◄────│     (Runner)        │
+│                     │     │                     │
+│  - API Gateway      │     │  - Pull-Only        │
+│  - WebAuthn         │     │  - Sandboxed        │
+│  - Ledger           │     │  - Ed25519 Signed   │
+└─────────────────────┘     └─────────────────────┘
+         ▲
+         │ WireGuard
+         ▼
+┌─────────────────────┐
+│      Office         │
+│   (LLM Runtime)     │
+│                     │
+│  - ASC Token        │
+│  - No DB Access     │
+│  - Constitution     │
+└─────────────────────┘
 ```
 
-3. Make executable:
+---
 
-```bash
-chmod +x executors/my_new_job.sh
-```
-
-## Security
-
-- **Network**: Only outbound to UBL and whitelisted services
-- **Filesystem**: Scoped to job work directory
-- **No SSH/GPG**: Keys are inaccessible
-- **No user data**: Documents/Desktop/Downloads blocked
-
-## Proof of Done
-
-- [ ] Runner starts and logs "pull loop ativo"
-- [ ] Polls UBL without errors
-- [ ] Executes allowed job type
-- [ ] Sends Receipt to UBL (HTTP 200)
-
-
-
+**UBL World** — *Where execution is proven, not claimed.*

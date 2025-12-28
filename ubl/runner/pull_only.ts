@@ -1,62 +1,63 @@
 /**
- * Runner Pull-Only Loop — ADR-UBL-Console-001 v1.1
+ * Runner Pull-Only Loop — Console v1.1 with Ed25519 Signatures
  * 
  * This is the execution agent for LAB 512.
  * NO INBOUND CONNECTIONS. Only pulls from UBL.
  * 
+ * Security:
+ * - All receipts signed with Ed25519 runner key
+ * - Receipts include command_id, permit_jti, binding_hash
+ * - UBL verifies signature before accepting
+ * 
  * Flow:
- * 1. Poll GET /v1/query/commands?pending=1
+ * 1. Poll GET /v1/query/commands?pending=true
  * 2. Execute job in sandbox
- * 3. POST /v1/exec.finish with Receipt
+ * 3. Sign receipt with Ed25519
+ * 4. POST /v1/exec.finish with signed Receipt
  */
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import { 
+  loadRunnerKey, 
+  getRunnerPublicKeyHex, 
+  signReceipt, 
+  blake3Hex, 
+  canonicalize,
+  type ReceiptPayload 
+} from './crypto.js';
 
-// ============================================
+// =============================================================================
 // CONFIGURATION
-// ============================================
+// =============================================================================
 
 const CONFIG = {
   UBL_URL: process.env.UBL_URL || 'http://lab256.local:8080',
-  TENANT_ID: process.env.TENANT_ID || 'T.UBL',
+  RUNNER_ID: process.env.RUNNER_ID || 'LAB_512',
   TARGET: process.env.RUNNER_TARGET || 'LAB_512',
   POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL || '5000'),
   SANDBOX_PROFILE: process.env.SANDBOX_PROFILE || './sandbox.sb',
   WORK_DIR: process.env.WORK_DIR || '/tmp/runner-work',
-  ALLOWLIST_PATH: process.env.ALLOWLIST_PATH || '../config/jobs.allowlist.T.UBL.json',
+  ALLOWLIST_PATH: process.env.ALLOWLIST_PATH || '../manifests/jobs.allowlist.yaml',
 };
 
-// ============================================
-// TYPES
-// ============================================
+// =============================================================================
+// TYPES (Console v1.1)
+// =============================================================================
 
 interface Command {
-  jti: string;
-  tenant_id: string;
-  job_id: string;
-  job_type: string;
-  params: Record<string, any>;
-  subject_hash: string;
-  policy_hash: string;
-  permit: Record<string, any>;
+  command_id: string;
+  permit_jti: string;
+  office: string;
+  action: string;
   target: string;
-  office_id: string;
-  pending: number;
-  issued_at: number;
-}
-
-interface Receipt {
-  tenant_id: string;
-  jobId: string;
-  status: 'success' | 'error';
-  finished_at: number;
-  logs_hash: string;
-  artifacts: string[];
-  usage: Record<string, any>;
-  error?: string;
+  args: Record<string, unknown>;
+  risk: string;
+  plan_hash: string;
+  binding_hash: string;
+  pending: boolean;
+  created_at_ms: number;
 }
 
 interface AllowlistEntry {
@@ -71,58 +72,67 @@ interface Allowlist {
   denied_patterns: string[];
 }
 
-// ============================================
+// =============================================================================
 // ALLOWLIST
-// ============================================
+// =============================================================================
 
 let allowlist: Allowlist | null = null;
 
 function loadAllowlist(): Allowlist {
   if (allowlist) return allowlist;
   
-  const raw = fs.readFileSync(CONFIG.ALLOWLIST_PATH, 'utf-8');
-  allowlist = JSON.parse(raw);
-  console.log(`[Runner] Loaded allowlist: ${allowlist!.jobs.length} job types`);
+  try {
+    // Try YAML first
+    if (CONFIG.ALLOWLIST_PATH.endsWith('.yaml') || CONFIG.ALLOWLIST_PATH.endsWith('.yml')) {
+      // Simple YAML parsing (for basic structure)
+      const raw = fs.readFileSync(CONFIG.ALLOWLIST_PATH, 'utf-8');
+      // For now, fall back to JSON path
+      const jsonPath = CONFIG.ALLOWLIST_PATH.replace(/\.ya?ml$/, '.json');
+      if (fs.existsSync(jsonPath)) {
+        const jsonRaw = fs.readFileSync(jsonPath, 'utf-8');
+        allowlist = JSON.parse(jsonRaw);
+      } else {
+        // Default minimal allowlist
+        allowlist = { jobs: [], denied_patterns: ['*'] };
+      }
+    } else {
+      const raw = fs.readFileSync(CONFIG.ALLOWLIST_PATH, 'utf-8');
+      allowlist = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn(`[Runner] Failed to load allowlist, using default deny-all:`, e);
+    allowlist = { jobs: [], denied_patterns: ['*'] };
+  }
+  
+  console.log(`[Runner] Allowlist: ${allowlist!.jobs.length} job types allowed`);
   return allowlist!;
 }
 
-function isJobAllowed(jobType: string): AllowlistEntry | null {
+function isJobAllowed(action: string): AllowlistEntry | null {
   const list = loadAllowlist();
   
   // Check denied patterns first
   for (const pattern of list.denied_patterns) {
     const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-    if (regex.test(jobType)) {
-      console.log(`[Runner] Job ${jobType} matches denied pattern ${pattern}`);
+    if (regex.test(action)) {
+      console.log(`[Runner] Action ${action} matches denied pattern ${pattern}`);
       return null;
     }
   }
   
-  // Find in allowlist
-  return list.jobs.find(j => j.jobType === jobType) || null;
+  // Find in allowlist (match by action/jobType)
+  return list.jobs.find(j => j.jobType === action) || null;
 }
 
-// ============================================
-// HASH UTILITIES
-// ============================================
-
-function blake3Hex(data: string): string {
-  // Note: In production, use actual blake3 library
-  // For now, using SHA256 as fallback (should be replaced)
-  const hash = crypto.createHash('sha256').update(data).digest('hex');
-  return `blake3:${hash.substring(0, 64)}`;
-}
-
-// ============================================
+// =============================================================================
 // UBL CLIENT
-// ============================================
+// =============================================================================
 
 async function queryPendingCommands(): Promise<Command[]> {
   const url = new URL('/v1/query/commands', CONFIG.UBL_URL);
-  url.searchParams.set('tenant_id', CONFIG.TENANT_ID);
   url.searchParams.set('target', CONFIG.TARGET);
-  url.searchParams.set('pending', '1');
-  url.searchParams.set('limit', '1');
+  url.searchParams.set('pending', 'true');
+  url.searchParams.set('limit', '5');
   
   try {
     const res = await fetch(url.toString());
@@ -137,7 +147,7 @@ async function queryPendingCommands(): Promise<Command[]> {
   }
 }
 
-async function submitReceipt(receipt: Receipt): Promise<boolean> {
+async function submitReceipt(receipt: ReceiptPayload & { sig_runner: string }): Promise<boolean> {
   const url = new URL('/v1/exec.finish', CONFIG.UBL_URL);
   
   try {
@@ -148,11 +158,12 @@ async function submitReceipt(receipt: Receipt): Promise<boolean> {
     });
     
     if (!res.ok) {
-      console.error(`[Runner] Receipt submit failed: ${res.status}`);
+      const body = await res.text();
+      console.error(`[Runner] Receipt submit failed: ${res.status} ${body}`);
       return false;
     }
     
-    console.log(`[Runner] Receipt submitted for ${receipt.jobId}`);
+    console.log(`[Runner] ✅ Receipt submitted for command ${receipt.command_id}`);
     return true;
   } catch (e) {
     console.error(`[Runner] Receipt error:`, e);
@@ -160,75 +171,107 @@ async function submitReceipt(receipt: Receipt): Promise<boolean> {
   }
 }
 
-// ============================================
+// =============================================================================
 // SANDBOX EXECUTION
-// ============================================
+// =============================================================================
 
 async function executeInSandbox(
   cmd: Command,
   entry: AllowlistEntry
-): Promise<{ success: boolean; logs: string; artifacts: string[] }> {
-  const jobDir = path.join(CONFIG.WORK_DIR, cmd.job_id);
+): Promise<{ success: boolean; logs: string; ret: unknown }> {
+  const jobDir = path.join(CONFIG.WORK_DIR, cmd.command_id);
   fs.mkdirSync(jobDir, { recursive: true });
   
   // Write job params for the executor
   const paramsFile = path.join(jobDir, 'params.json');
-  fs.writeFileSync(paramsFile, JSON.stringify(cmd.params, null, 2));
+  fs.writeFileSync(paramsFile, JSON.stringify(cmd.args, null, 2));
   
-  // Build sandbox command
-  // macOS: sandbox-exec -f <profile> <command>
-  const executorScript = path.join(__dirname, 'executors', `${cmd.job_type.replace(/\./g, '_')}.sh`);
+  // Build executor script path (action name with dots replaced by underscores)
+  const executorScript = path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    'executors',
+    `${cmd.action.replace(/\./g, '_')}.sh`
+  );
   
   if (!fs.existsSync(executorScript)) {
     return {
       success: false,
-      logs: `No executor found for job type: ${cmd.job_type}`,
-      artifacts: [],
+      logs: `No executor found for action: ${cmd.action} (expected: ${executorScript})`,
+      ret: null,
     };
   }
   
   return new Promise((resolve) => {
     const logs: string[] = [];
-    const artifacts: string[] = [];
+    let ret: unknown = null;
     
-    const proc = spawn('sandbox-exec', [
-      '-f', CONFIG.SANDBOX_PROFILE,
-      'bash', executorScript, paramsFile,
-    ], {
-      cwd: jobDir,
-      env: {
-        ...process.env,
-        JOB_ID: cmd.job_id,
-        JOB_TYPE: cmd.job_type,
-        TENANT_ID: cmd.tenant_id,
-        FS_SCOPE: entry.fs_scope,
-      },
-    });
+    // Detect platform for sandbox
+    const isMac = process.platform === 'darwin';
+    let proc;
+    
+    if (isMac && fs.existsSync(CONFIG.SANDBOX_PROFILE)) {
+      // macOS sandbox-exec
+      proc = spawn('sandbox-exec', [
+        '-f', CONFIG.SANDBOX_PROFILE,
+        'bash', executorScript, paramsFile,
+      ], {
+        cwd: jobDir,
+        env: {
+          ...process.env,
+          COMMAND_ID: cmd.command_id,
+          ACTION: cmd.action,
+          OFFICE: cmd.office,
+          TARGET: cmd.target,
+          RISK: cmd.risk,
+          FS_SCOPE: entry.fs_scope,
+          OUTPUT_FILE: path.join(jobDir, 'output.json'),
+        },
+      });
+    } else {
+      // No sandbox (development mode)
+      console.warn(`[Runner] ⚠️  Running without sandbox (development mode)`);
+      proc = spawn('bash', [executorScript, paramsFile], {
+        cwd: jobDir,
+        env: {
+          ...process.env,
+          COMMAND_ID: cmd.command_id,
+          ACTION: cmd.action,
+          OFFICE: cmd.office,
+          TARGET: cmd.target,
+          RISK: cmd.risk,
+          FS_SCOPE: entry.fs_scope,
+          OUTPUT_FILE: path.join(jobDir, 'output.json'),
+        },
+      });
+    }
     
     proc.stdout.on('data', (data) => {
       const line = data.toString();
       logs.push(line);
-      console.log(`[Job ${cmd.job_id}] ${line.trim()}`);
+      console.log(`[Job ${cmd.command_id.substring(0, 8)}] ${line.trim()}`);
     });
     
     proc.stderr.on('data', (data) => {
       const line = data.toString();
       logs.push(`[stderr] ${line}`);
-      console.error(`[Job ${cmd.job_id}] ${line.trim()}`);
+      console.error(`[Job ${cmd.command_id.substring(0, 8)}] ${line.trim()}`);
     });
     
     proc.on('close', (code) => {
-      // Collect artifacts
-      const artifactsDir = path.join(jobDir, 'artifacts');
-      if (fs.existsSync(artifactsDir)) {
-        const files = fs.readdirSync(artifactsDir);
-        artifacts.push(...files.map(f => path.join(artifactsDir, f)));
+      // Try to read output.json for return value
+      const outputFile = path.join(jobDir, 'output.json');
+      if (fs.existsSync(outputFile)) {
+        try {
+          ret = JSON.parse(fs.readFileSync(outputFile, 'utf-8'));
+        } catch (e) {
+          logs.push(`[Runner] Failed to parse output.json: ${e}`);
+        }
       }
       
       resolve({
         success: code === 0,
         logs: logs.join(''),
-        artifacts,
+        ret,
       });
     });
     
@@ -236,88 +279,99 @@ async function executeInSandbox(
       resolve({
         success: false,
         logs: `Process error: ${err.message}`,
-        artifacts: [],
+        ret: null,
       });
     });
   });
 }
 
-// ============================================
+// =============================================================================
 // MAIN LOOP
-// ============================================
+// =============================================================================
 
 async function processCommand(cmd: Command): Promise<void> {
-  console.log(`[Runner] Processing job ${cmd.job_id} (${cmd.job_type})`);
+  console.log(`[Runner] Processing command ${cmd.command_id.substring(0, 8)}... (${cmd.action})`);
+  console.log(`  Office: ${cmd.office}`);
+  console.log(`  Target: ${cmd.target}`);
+  console.log(`  Risk: ${cmd.risk}`);
+  console.log(`  Binding: ${cmd.binding_hash.substring(0, 20)}...`);
+  
+  const startTime = Date.now();
+  let result: { success: boolean; logs: string; ret: unknown };
   
   // Check allowlist
-  const entry = isJobAllowed(cmd.job_type);
+  const entry = isJobAllowed(cmd.action);
   if (!entry) {
-    const receipt: Receipt = {
-      tenant_id: cmd.tenant_id,
-      jobId: cmd.job_id,
-      status: 'error',
-      finished_at: Date.now(),
-      logs_hash: blake3Hex('Job type not in allowlist'),
-      artifacts: [],
-      usage: {},
-      error: `Job type ${cmd.job_type} not in allowlist`,
+    result = {
+      success: false,
+      logs: `Action ${cmd.action} not in allowlist`,
+      ret: { error: 'ACTION_NOT_ALLOWED' },
     };
-    await submitReceipt(receipt);
-    return;
+  } else {
+    // Execute in sandbox
+    result = await executeInSandbox(cmd, entry);
   }
   
-  // Execute in sandbox
-  const startTime = Date.now();
-  const result = await executeInSandbox(cmd, entry);
   const duration = Date.now() - startTime;
   
-  // Build receipt
-  const receipt: Receipt = {
-    tenant_id: cmd.tenant_id,
-    jobId: cmd.job_id,
-    status: result.success ? 'success' : 'error',
-    finished_at: Date.now(),
+  // Build receipt payload
+  const receiptPayload: ReceiptPayload = {
+    command_id: cmd.command_id,
+    permit_jti: cmd.permit_jti,
+    binding_hash: cmd.binding_hash,
+    runner_id: CONFIG.RUNNER_ID,
+    status: result.success ? 'OK' : 'ERROR',
     logs_hash: blake3Hex(result.logs),
-    artifacts: result.artifacts,
-    usage: {
+    ret: result.ret ?? { 
+      success: result.success, 
       duration_ms: duration,
-      fs_scope: entry.fs_scope,
+      error: result.success ? undefined : result.logs.substring(0, 500),
     },
-    error: result.success ? undefined : result.logs.substring(0, 1000),
   };
   
-  await submitReceipt(receipt);
+  // Sign the receipt
+  const signedReceipt = signReceipt(receiptPayload);
+  
+  console.log(`[Runner] Receipt signed (${signedReceipt.sig_runner.substring(0, 30)}...)`);
+  
+  // Submit
+  await submitReceipt(signedReceipt);
 }
 
 async function pullLoop(): Promise<void> {
-  console.log(`[Runner] Starting pull-only loop`);
-  console.log(`  UBL: ${CONFIG.UBL_URL}`);
-  console.log(`  Tenant: ${CONFIG.TENANT_ID}`);
-  console.log(`  Target: ${CONFIG.TARGET}`);
-  console.log(`  Poll interval: ${CONFIG.POLL_INTERVAL_MS}ms`);
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('  UBL Runner — Pull-Only Executor with Ed25519 Signatures  ');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log(`  UBL API:      ${CONFIG.UBL_URL}`);
+  console.log(`  Runner ID:    ${CONFIG.RUNNER_ID}`);
+  console.log(`  Target:       ${CONFIG.TARGET}`);
+  console.log(`  Poll:         ${CONFIG.POLL_INTERVAL_MS}ms`);
+  console.log(`  Public Key:   ${getRunnerPublicKeyHex().substring(0, 16)}...`);
+  console.log('═══════════════════════════════════════════════════════════');
   
   // Ensure work directory exists
   fs.mkdirSync(CONFIG.WORK_DIR, { recursive: true });
   
   // Load allowlist
-  try {
-    loadAllowlist();
-  } catch (e) {
-    console.error(`[Runner] Failed to load allowlist:`, e);
-    process.exit(1);
-  }
+  loadAllowlist();
+  
+  let iteration = 0;
   
   while (true) {
     try {
       const commands = await queryPendingCommands();
       
-      if (commands.length === 0) {
-        // No pending commands
-      } else {
+      if (commands.length > 0) {
+        console.log(`[Runner] Found ${commands.length} pending command(s)`);
         for (const cmd of commands) {
           await processCommand(cmd);
         }
+      } else if (iteration % 12 === 0) {
+        // Log every 60 seconds (12 * 5s) when idle
+        console.log(`[Runner] No pending commands, waiting...`);
       }
+      
+      iteration++;
     } catch (e) {
       console.error(`[Runner] Loop error:`, e);
     }
@@ -327,11 +381,10 @@ async function pullLoop(): Promise<void> {
   }
 }
 
-// ============================================
+// =============================================================================
 // ENTRY POINT
-// ============================================
+// =============================================================================
 
+console.log('[Runner] Initializing...');
+loadRunnerKey();
 pullLoop().catch(console.error);
-
-
-

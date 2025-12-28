@@ -1,14 +1,19 @@
 {
   "name": "ubl-runner",
-  "version": "1.0.0",
-  "description": "UBL Runner - Pull-only job executor for LAB 512",
+  "version": "2.0.0",
+  "description": "UBL Runner - Pull-only job executor with Ed25519 signatures",
   "main": "pull_only.ts",
   "type": "module",
   "scripts": {
     "start": "npx tsx pull_only.ts",
-    "dev": "npx tsx watch pull_only.ts"
+    "dev": "npx tsx watch pull_only.ts",
+    "keygen": "npx tsx -e \"import { generateRunnerKeypair } from './crypto.js'; generateRunnerKeypair('./runner.key');\"",
+    "test:crypto": "npx tsx -e \"import { signReceipt, blake3Hex, canonicalize, verifySignature, getRunnerPublicKeyHex } from './crypto.js'; const payload = { command_id: 'test', permit_jti: 'jti', binding_hash: 'hash', runner_id: 'LAB_512', status: 'OK', logs_hash: 'logs', ret: {} }; const signed = signReceipt(payload); console.log('Signed:', signed); const canonical = canonicalize(payload); console.log('Verify:', verifySignature(canonical, signed.sig_runner, getRunnerPublicKeyHex()));\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.4.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
@@ -18,6 +23,3 @@
     "node": ">=18.0.0"
   }
 }
-
-
-
