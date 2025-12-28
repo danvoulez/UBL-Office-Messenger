@@ -1,0 +1,17 @@
+{
+  "C.Messenger": {
+    "policy": "1.0.0"
+  },
+  "C.Artifacts": {
+    "policy": "1.0.0"
+  },
+  "C.Policy": {
+    "policy": "self"
+  },
+  "C.Pacts": {
+    "policy": "1.0.0"
+  },
+  "C.Runner": {
+    "policy": "1.0.0"
+  }
+}

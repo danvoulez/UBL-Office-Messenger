@@ -1,0 +1,19 @@
+(version 1)
+
+(deny default)
+(allow process*)
+(allow sysctl-read)
+
+(allow file-read* (regex "^/System" "^/usr" "^/bin" "^/Library")
+                   (subpath "/tmp")
+                   (subpath "/Users/Shared/ubl-runner/ro"))
+(allow file-write* (subpath "/Users/Shared/ubl-runner/rw")
+                    (subpath "/tmp"))
+
+(allow network-outbound
+  ;; ONLY internal UBL services - no public internet access
+  (remote tcp "10.77.0.1:8080")   ; UBL API @ LAB 256
+  (remote tcp "10.77.0.1:9000")   ; MinIO @ LAB 256
+)
+
+(deny network-inbound)

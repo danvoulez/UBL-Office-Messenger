@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # UBL - Event sourcing backbone
+  ubl:
+    build:
+      context: ../ubl
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - RUST_LOG=info
+      - UBL_HOST=0.0.0.0
+      - UBL_PORT=3000
+    volumes:
+      - ubl_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ubl-network
+
+  # Office - LLM Operating System Runtime
+  office:
+    build:
+      context: ./office
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=info
+      - OFFICE__SERVER__HOST=0.0.0.0
+      - OFFICE__SERVER__PORT=8080
+      - OFFICE__UBL__ENDPOINT=http://ubl:3000
+      - OFFICE__UBL__DEFAULT_CONTAINER=office
+      - OFFICE__LLM__PROVIDER=anthropic
+      - OFFICE__LLM__MODEL=claude-3-5-sonnet-20241022
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    depends_on:
+      ubl:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ubl-network
+
+  # UBL Messenger Backend (Rust) - Target implementation
+  messenger-backend:
+    build:
+      context: ../ubl-messenger/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - RUST_LOG=info
+      - MESSENGER__SERVER__HOST=0.0.0.0
+      - MESSENGER__SERVER__PORT=8081
+      - MESSENGER__OFFICE__ENDPOINT=http://office:8080
+      - MESSENGER__OFFICE__TIMEOUT_MS=30000
+      - MESSENGER__UBL__ENDPOINT=http://ubl:3000
+      - MESSENGER__UBL__CONTAINER_ID=messenger
+    depends_on:
+      office:
+        condition: service_healthy
+      ubl:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ubl-network
+
+  # UBL Messenger Backend (Node.js) - Temporary implementation
+  messenger-backend-node:
+    build:
+      context: ../ubl-messenger/backend-node
+      dockerfile: Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      - PORT=8787
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      - ubl
+    networks:
+      - ubl-network
+    profiles:
+      - node-backend
+
+  # UBL Messenger Frontend (React)
+  messenger-frontend:
+    build:
+      context: ../ubl-messenger/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8787
+    depends_on:
+      - messenger-backend-node
+    networks:
+      - ubl-network
+    profiles:
+      - ui
+
+volumes:
+  ubl_data:
+    driver: local
+
+networks:
+  ubl-network:
+    driver: bridge

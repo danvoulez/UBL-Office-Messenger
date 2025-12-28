@@ -1,0 +1,121 @@
+{
+  "$schema": "./jobs.allowlist.schema.json",
+  "version": "1.0.0",
+  "tenant_id": "T.UBL",
+  "description": "Official allowlist for T.UBL tenant - only these job types are executable",
+  "jobs": [
+    {
+      "jobType": "git.registry.init",
+      "description": "Initialize a new repository in the Registry",
+      "risk": "L2",
+      "ttl_ms": 120000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": ["minio.internal:9000"]
+    },
+    {
+      "jobType": "git.registry.push",
+      "description": "Push commits to a registry branch",
+      "risk": "L2",
+      "ttl_ms": 120000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": ["minio.internal:9000"]
+    },
+    {
+      "jobType": "git.registry.tag_release",
+      "description": "Create a new release tag",
+      "risk": "L3",
+      "ttl_ms": 300000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": ["minio.internal:9000"]
+    },
+    {
+      "jobType": "git.registry.merge_protected",
+      "description": "Merge to protected branch (main/master)",
+      "risk": "L4",
+      "ttl_ms": 180000,
+      "requires_step_up": true,
+      "fs_scope": "project",
+      "network_scope": ["minio.internal:9000"],
+      "requires_diff": true
+    },
+    {
+      "jobType": "service.restart",
+      "description": "Restart a managed service",
+      "risk": "L3",
+      "ttl_ms": 300000,
+      "requires_step_up": false,
+      "fs_scope": "none",
+      "network_scope": []
+    },
+    {
+      "jobType": "infra.ray.scale_worker",
+      "description": "Scale Ray cluster workers",
+      "risk": "L3",
+      "ttl_ms": 300000,
+      "requires_step_up": false,
+      "fs_scope": "none",
+      "network_scope": ["ray-head.internal:6379"]
+    },
+    {
+      "jobType": "system.security.patch",
+      "description": "Apply security patches",
+      "risk": "L5",
+      "ttl_ms": 180000,
+      "requires_step_up": true,
+      "requires_quorum": true,
+      "quorum_threshold": 2,
+      "fs_scope": "system",
+      "network_scope": [],
+      "requires_diff": true
+    },
+    {
+      "jobType": "llm.inference.run",
+      "description": "Execute LLM inference job",
+      "risk": "L1",
+      "ttl_ms": 600000,
+      "requires_step_up": false,
+      "fs_scope": "temp",
+      "network_scope": ["ollama.internal:11434"]
+    },
+    {
+      "jobType": "llm.agent.task",
+      "description": "Execute an LLM agent task with tools",
+      "risk": "L2",
+      "ttl_ms": 900000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": ["ollama.internal:11434", "minio.internal:9000"]
+    },
+    {
+      "jobType": "build.compile",
+      "description": "Compile/build a project",
+      "risk": "L2",
+      "ttl_ms": 1800000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": []
+    },
+    {
+      "jobType": "test.run",
+      "description": "Run project tests",
+      "risk": "L1",
+      "ttl_ms": 600000,
+      "requires_step_up": false,
+      "fs_scope": "project",
+      "network_scope": []
+    }
+  ],
+  "denied_patterns": [
+    "shell.*",
+    "exec.*",
+    "rm.*",
+    "sudo.*",
+    "admin.*"
+  ]
+}
+
+
+

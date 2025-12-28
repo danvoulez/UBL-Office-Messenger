@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "defaults": {
+    "remote_base": "/opt/ubl",
+    "bin_dir": "/opt/ubl/bin",
+    "etc_dir": "/opt/ubl/etc",
+    "log_dir": "/opt/ubl/logs"
+  },
+  "hosts": {
+    "lab256": {
+      "wg_ip": "${LAB256_WG}",
+      "role": "server",
+      "installs": [
+        {
+          "type": "bin",
+          "name": "ubl-server",
+          "from_env": "UBL_SERVER_BIN",
+          "to": "${bin_dir}/ubl-server",
+          "mode": "0755"
+        },
+        {
+          "type": "ecosystem",
+          "name": "ecosystem.256.config.js",
+          "to": "${etc_dir}/ecosystem.256.config.js"
+        },
+        {
+          "type": "config",
+          "name": "engine.yaml",
+          "source": "templates/engine.lab256.yaml",
+          "to": "${etc_dir}/engine.yaml"
+        },
+        {
+          "type": "service",
+          "name": "pm2:ubl-server",
+          "cmd": "pm2 start ${etc_dir}/ecosystem.256.config.js --update-env && pm2 save"
+        }
+      ]
+    },
+    "lab512": {
+      "wg_ip": "${LAB512_WG}",
+      "role": "runner",
+      "installs": [
+        {
+          "type": "bin",
+          "name": "ubl-runner",
+          "from_env": "UBL_RUNNER_BIN",
+          "to": "${bin_dir}/ubl-runner",
+          "mode": "0755"
+        },
+        {
+          "type": "ecosystem",
+          "name": "ecosystem.512.config.js",
+          "to": "${etc_dir}/ecosystem.512.config.js"
+        },
+        {
+          "type": "config",
+          "name": "runner.yaml",
+          "source": "templates/runner.lab512.yaml",
+          "to": "${etc_dir}/runner.yaml"
+        },
+        {
+          "type": "service",
+          "name": "pm2:ubl-runner",
+          "cmd": "pm2 start ${etc_dir}/ecosystem.512.config.js --update-env && pm2 save"
+        }
+      ]
+    }
+  }
+}

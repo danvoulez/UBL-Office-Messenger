@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8"/>
+<title>UBL ID • WebAuthn Test</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 20px; }
+  .card { border:1px solid #ddd; border-radius:12px; padding:16px; margin:12px 0; background:#fafafa; }
+  button { padding:8px 14px; border-radius:10px; border:1px solid #ccc; cursor:pointer; background:#fff; }
+  button:hover { background:#f0f0f0; }
+  input { padding:8px; border-radius:8px; border:1px solid #ccc; width:260px; }
+  pre { background:#111; color:#0f0; padding:12px; border-radius:8px; overflow:auto; font-size:12px; max-height:400px; }
+  .ok { color:#0a0; }
+  .err { color:#f33; }
+</style>
+<h1>🔐 UBL ID • WebAuthn Test</h1>
+<p>Test Person identity with passkey registration and login.</p>
+
+<div class="card">
+  <h3>1) Username</h3>
+  <input id="username" placeholder="dan" value="dan"/>
+</div>
+
+<div class="card">
+  <h3>2) Register Passkey</h3>
+  <button id="btnReg">🆕 Register (create credential)</button>
+  <pre id="outReg"></pre>
+</div>
+
+<div class="card">
+  <h3>3) Login with Passkey</h3>
+  <button id="btnLogin">🔑 Login (authenticate)</button>
+  <pre id="outLogin"></pre>
+</div>
+
+<script type="module">
+import * as W from "https://cdn.jsdelivr.net/npm/@github/webauthn-json@2.1.1/dist/esm/webauthn-json.browser.ponyfill.min.js";
+
+const API = location.origin; // ajuste se o server estiver noutro host
+
+async function j(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res.json();
+}
+
+async function register() {
+  try {
+    const username = document.getElementById('username').value.trim();
+    
+    // 1. Begin registration
+    document.getElementById('outReg').textContent = 'Starting registration...';
+    const begin = await j('POST', '/id/register/begin', { username });
+    
+    if (!begin.challenge_id) {
+      throw new Error('No challenge_id in response');
+    }
+    
+    document.getElementById('outReg').textContent = `Challenge received: ${begin.challenge_id}`;
+    
+    // 2. Create credential with authenticator
+    const publicKey = begin.options;
+    const cred = await W.create({ publicKey });
+    
+    document.getElementById('outReg').textContent += '\nCredential created, finishing...';
+    
+    // 3. Finish registration
+    const finish = await j('POST', '/id/register/finish', { 
+      challenge_id: begin.challenge_id, 
+      attestation: cred 
+    });
+    
+    document.getElementById('outReg').textContent = JSON.stringify(finish, null, 2);
+    document.getElementById('outReg').className = 'ok';
+  } catch (e) {
+    document.getElementById('outReg').textContent = `❌ Error: ${e.message}\n\n${e.stack}`;
+    document.getElementById('outReg').className = 'err';
+  }
+}
+
+async function login() {
+  try {
+    const username = document.getElementById('username').value.trim();
+    
+    // 1. Begin login
+    document.getElementById('outLogin').textContent = 'Starting login...';
+    const begin = await j('POST', '/id/login/begin', { username });
+    
+    if (!begin.challenge_id) {
+      throw new Error('No challenge_id in response');
+    }
+    
+    document.getElementById('outLogin').textContent = `Challenge received: ${begin.challenge_id}`;
+    
+    // 2. Get assertion from authenticator
+    const publicKey = begin.public_key;
+    const assertion = await W.get({ publicKey });
+    
+    document.getElementById('outLogin').textContent += '\nAssertion created, finishing...';
+    
+    // 3. Finish login
+    const finish = await j('POST', '/id/login/finish', { 
+      challenge_id: begin.challenge_id, 
+      assertion 
+    });
+    
+    document.getElementById('outLogin').textContent = JSON.stringify(finish, null, 2);
+    document.getElementById('outLogin').className = 'ok';
+  } catch (e) {
+    document.getElementById('outLogin').textContent = `❌ Error: ${e.message}\n\n${e.stack}`;
+    document.getElementById('outLogin').className = 'err';
+  }
+}
+
+document.getElementById('btnReg').onclick = () => register();
+document.getElementById('btnLogin').onclick = () => login();
+</script>

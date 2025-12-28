@@ -1,0 +1,9 @@
+{
+  "kind": "git/ref",
+  "tenant": "acme",
+  "repo": "billing",
+  "ref": "refs/heads/main",
+  "old": "0000000000000000000000000000000000000000",
+  "new": "cafe...deadbeef...",
+  "mode": "ff"
+}

@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  title: UBL 2.0 API (LLM-friendly)
+  version: 1.0.0
+  description: >
+    API pública para assinar, validar e commitar links; obter head/tail do ledger;
+    presign de artefatos; e sessões de PACT. Todos os campos seguem SPEC-UBL-* v1.0.
+servers:
+  - url: https://api.ubl.local
+tags:
+  - name: link
+    description: TDLN → LINK → Membrane
+  - name: ledger
+  - name: artifacts
+  - name: pacts
+paths:
+  /link/signing-bytes:
+    post:
+      tags: [link]
+      summary: Retorna signing_bytes canônicos para um draft de LinkCommit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkDraft'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningBytesResponse'
+  /link/validate:
+    post:
+      tags: [link]
+      summary: Valida assinatura e física sem commitar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignedLink'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+  /link/commit:
+    post:
+      tags: [link]
+      summary: Valida + commita no ledger (append-only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignedLink'
+      responses:
+        '200':
+          description: Committed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitResult'
+  /ledger/{container_id}/head:
+    get:
+      tags: [ledger]
+      summary: Head causal do container
+      parameters:
+        - in: path
+          name: container_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerHead'
+  /ledger/{container_id}/tail:
+    get:
+      tags: [ledger]
+      summary: Tail SSE (event-stream) do ledger do container
+      parameters:
+        - in: path
+          name: container_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /presign/put:
+    post:
+      tags: [artifacts]
+      summary: Presign para upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignPutRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignPutResponse'
+  /presign/get:
+    post:
+      tags: [artifacts]
+      summary: Presign para download
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignGetRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignGetResponse'
+  /pacts/create:
+    post:
+      tags: [pacts]
+      summary: Cria pacto (multisig, janela, risco)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PactCreateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PactRegistry' }
+  /pacts/session:
+    post:
+      tags: [pacts]
+      summary: Gera PactProof para atom_hash
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PactSessionRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PactProof' }
+components:
+  schemas:
+    IntentClass:
+      type: string
+      enum: [Observation, Conservation, Entropy, Evolution]
+    LinkDraft:
+      type: object
+      required: [version, container_id, expected_sequence, previous_hash, atom_hash, intent_class, physics_delta]
+      properties:
+        version: { type: integer, format: int32, example: 1 }
+        container_id: { type: string, example: "C.Messenger" }
+        expected_sequence: { type: integer, format: int64, example: 42 }
+        previous_hash: { type: string, example: "0000...abcd" }
+        atom_hash: { type: string, example: "b3e1..." }
+        intent_class: { $ref: '#/components/schemas/IntentClass' }
+        physics_delta: { type: string, description: "i128 encoded as string", example: "0" }
+        pact: { $ref: '#/components/schemas/PactProof', nullable: true }
+    SignedLink:
+      allOf:
+        - $ref: '#/components/schemas/LinkDraft'
+        - type: object
+          required: [author_pubkey, signature]
+          properties:
+            author_pubkey: { type: string }
+            signature: { type: string }
+    SigningBytesResponse:
+      type: object
+      required: [signing_bytes_hex, server_tip]
+      properties:
+        signing_bytes_hex: { type: string }
+        server_tip:
+          $ref: '#/components/schemas/LedgerHead'
+    ValidationResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        error: { type: string, nullable: true, description: "MembraneError canônico" }
+    CommitResult:
+      type: object
+      required: [committed, entry]
+      properties:
+        committed: { type: boolean }
+        entry: { $ref: '#/components/schemas/LedgerEntry' }
+    LedgerHead:
+      type: object
+      required: [container_id, sequence, entry_hash, timestamp]
+      properties:
+        container_id: { type: string }
+        sequence: { type: integer, format: int64 }
+        entry_hash: { type: string }
+        timestamp: { type: string, format: date-time }
+    LedgerEntry:
+      type: object
+      required: [container_id, sequence, link_hash, previous_hash, entry_hash, timestamp]
+      properties:
+        container_id: { type: string }
+        sequence: { type: integer, format: int64 }
+        link_hash: { type: string }
+        previous_hash: { type: string }
+        entry_hash: { type: string }
+        timestamp: { type: string, format: date-time }
+    PresignPutRequest:
+      type: object
+      required: [project_id, kind, sha256, content_type, size]
+      properties:
+        project_id: { type: string }
+        kind: { type: string, example: "dataset" }
+        sha256: { type: string }
+        content_type: { type: string }
+        size: { type: integer, format: int64 }
+    PresignPutResponse:
+      type: object
+      required: [url, headers, key]
+      properties:
+        url: { type: string }
+        headers: { type: object, additionalProperties: true }
+        key: { type: string, description: "ubl/projects/{project_id}/{kind}/{sha256}.{ext}" }
+    PresignGetRequest:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+    PresignGetResponse:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+    PactCreateRequest:
+      type: object
+      required: [pact_id, version, scope, intent_class, threshold, signers, window, risk_level]
+      properties:
+        pact_id: { type: string }
+        version: { type: integer, format: int32, example: 1 }
+        scope: { type: string, enum: [Container, Namespace, Global] }
+        intent_class: { $ref: '#/components/schemas/IntentClass' }
+        threshold: { type: integer, format: int32 }
+        signers: { type: array, items: { type: string, description: "PubKey32 (hex)" } }
+        window:
+          type: object
+          required: [not_before, not_after]
+          properties:
+            not_before: { type: string, format: date-time }
+            not_after: { type: string, format: date-time }
+        risk_level: { type: string, enum: [L0, L1, L2, L3, L4, L5] }
+    PactRegistry:
+      type: object
+      properties:
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/PactCreateRequest' }
+    PactSessionRequest:
+      type: object
+      required: [pact_id, atom_hash, intent_class, physics_delta]
+      properties:
+        pact_id: { type: string }
+        atom_hash: { type: string }
+        intent_class: { $ref: '#/components/schemas/IntentClass' }
+        physics_delta: { type: string }
+    PactProof:
+      type: object
+      required: [pact_id, signatures]
+      properties:
+        pact_id: { type: string }
+        signatures:
+          type: array
+          items:
+            type: string
+            description: Ed25519 signature hex do hash canônico do pacto

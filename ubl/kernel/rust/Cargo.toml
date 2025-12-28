@@ -1,0 +1,53 @@
+[workspace]
+members = ["ubl-atom", "ubl-kernel", "ubl-link", "ubl-membrane", "ubl-ledger", "ubl-pact", "ubl-policy-vm", "ubl-runner-core", "ubl-server"]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Core
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+hex = "0.4"
+
+# Crypto (SPEC-UBL-KERNEL)
+blake3 = "1.5"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+# HTTP Server
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Database (for persistent ledger)
+# NOTE: "offline" feature allows compilation without DATABASE_URL by using cached query metadata
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "time", "json", "offline"], default-features = false }
+time = { version = "0.3", features = ["formatting", "macros", "serde"] }
+
+# WebAuthn
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+webauthn-rs-proto = "0.5"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Testing
+quickcheck = "1.0"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

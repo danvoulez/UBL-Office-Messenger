@@ -1,0 +1,43 @@
+# OFFICE Production Configuration
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[ubl]
+endpoint = "http://ubl:3000"
+default_container = "office"
+timeout_ms = 30000
+retry_attempts = 3
+retry_delay_ms = 1000
+
+[llm]
+# Provider: "anthropic", "openai", or "local"
+provider = "anthropic"
+model = "claude-3-5-sonnet-20241022"
+timeout_ms = 60000
+max_tokens = 4096
+
+[governance]
+# Enable sanity checking for claims
+sanity_check_enabled = true
+# Enable dreaming cycle for memory consolidation
+dreaming_enabled = true
+# Dreaming interval in seconds (default: 1 hour)
+dreaming_interval_secs = 3600
+# Enable simulation for action validation
+simulation_enabled = true
+
+[session]
+# Default session type: "work", "assist", "deliberate", "research"
+default_type = "assist"
+# Default session mode: "commitment", "deliberation"
+default_mode = "deliberation"
+# Session timeout in seconds
+timeout_secs = 3600
+# Token budget enforcement
+enforce_token_budget = true
+
+[logging]
+level = "info"
+format = "json"

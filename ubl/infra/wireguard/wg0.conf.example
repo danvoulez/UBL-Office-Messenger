@@ -1,0 +1,12 @@
+# Done if… LAB 256 ⇄ LAB 512 ping funciona, MTU correto, AllowedIPs restrito.
+[Interface]
+PrivateKey = <REPLACE>
+Address = 10.77.0.2/24
+ListenPort = 51820
+MTU = 1420
+
+[Peer] # LAB512
+PublicKey = <LAB512_PUB>
+AllowedIPs = 10.77.0.3/32
+Endpoint = lab512.example:51820
+PersistentKeepalive = 15

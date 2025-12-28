@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "wasm_hash": "<pin-after-build>",
+  "scope": [
+    "C.Jobs"
+  ],
+  "risk_level": "L3",
+  "trust_levels": ["L2", "L3"]
+}
+

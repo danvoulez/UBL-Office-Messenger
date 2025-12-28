@@ -1,0 +1,131 @@
+# Trinity Stack - Docker Compose
+# Usage: docker compose -f docker-compose.stack.yml up
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # DATABASE
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: trinity-postgres
+    environment:
+      POSTGRES_DB: ubl_ledger
+      POSTGRES_USER: ubl
+      POSTGRES_PASSWORD: ubl_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ubl -d ubl_ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # UBL SERVER
+  # ============================================================================
+  ubl:
+    build:
+      context: ./ubl/kernel/rust/ubl-server
+      dockerfile: Dockerfile
+    container_name: trinity-ubl
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_URL: postgres://ubl:ubl_secret@postgres:5432/ubl_ledger
+      RUST_LOG: info,ubl_server=debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # OFFICE
+  # ============================================================================
+  office:
+    build:
+      context: ./office/office
+      dockerfile: Dockerfile
+    container_name: trinity-office
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      UBL_ENDPOINT: http://ubl:8080
+      UBL_CONTAINER_ID: office
+      RUST_LOG: info,office=debug
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    ports:
+      - "8787:8787"
+    depends_on:
+      ubl:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8787/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # MESSENGER BACKEND
+  # ============================================================================
+  messenger-backend:
+    build:
+      context: ./ubl-messenger/backend
+      dockerfile: Dockerfile
+    container_name: trinity-messenger-backend
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4000
+      UBL_ENDPOINT: http://ubl:8080
+      UBL_CONTAINER_ID: messenger
+      OFFICE_ENDPOINT: http://office:8787
+      RUST_LOG: info,messenger=debug
+    ports:
+      - "4000:4000"
+    depends_on:
+      ubl:
+        condition: service_healthy
+      office:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # MESSENGER FRONTEND (Optional - can run locally)
+  # ============================================================================
+  messenger-frontend:
+    build:
+      context: ./ubl-messenger/frontend
+      dockerfile: Dockerfile
+    container_name: trinity-messenger-frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:4000
+    ports:
+      - "5173:80"
+    depends_on:
+      - messenger-backend
+    profiles:
+      - frontend  # Only starts with: docker compose --profile frontend up
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: trinity-network
+
+
+

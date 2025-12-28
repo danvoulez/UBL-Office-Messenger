@@ -1,0 +1,29 @@
+engine:
+  mode: gateway
+  sse_channel: ubl_tail
+ledger:
+  driver: postgres
+  dsn: postgres://ubl_dev@localhost:5432/ubl_dev
+policy:
+  repo: policies/tdln.repo.wasm
+  workspace: policies/tdln.workspace.wasm
+  deploy: policies/tdln.deploy.wasm
+identity:
+  passkey: enabled
+  session_ttl_sec: 3600
+  stepup_ttl_sec: 600
+  asc_required: true
+tokens:
+  alg: ed25519
+  exp_sec: 600
+storage:
+  endpoint: http://minio.lab256
+  bucket_alias:
+    repos: vault-repos
+    workspaces: vault-workspaces
+    deploy: vault-deploy
+runner:
+  dispatch_url: http://lab512.runner.local/execute
+  egress_whitelist:
+    - registry.acme.local:443
+    - kubernetes.default.svc:443

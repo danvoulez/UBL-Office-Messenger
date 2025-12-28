@@ -1,0 +1,100 @@
+# Office Registry - T.UBL Tenant
+# Defines registered Office instances and their capabilities
+# Updated: 2025-12-28
+
+tenant_id: T.UBL
+version: "1.0"
+
+offices:
+  # LAB 256 - Gateway/API Zone
+  - id: office:lab256
+    name: "LAB 256 Gateway Office"
+    zone: LAB_256
+    role: gateway
+    capabilities:
+      - permit_issuing
+      - command_routing
+      - receipt_validation
+    allowed_targets:
+      - LAB_512
+      - LAB_8GB
+    wireguard_ip: 10.77.0.1
+    public_key: "<LAB256_OFFICE_PUBKEY>"
+    constitution:
+      # Gateway can issue permits but not execute
+      can_issue_permits: true
+      can_execute: false
+      max_permit_ttl_sec: 600
+
+  # LAB 512 - Runner/Sandbox Zone
+  - id: office:lab512
+    name: "LAB 512 Runner Office"
+    zone: LAB_512
+    role: runner
+    capabilities:
+      - job_execution
+      - sandbox_management
+      - artifact_storage
+    allowed_targets: []  # Runner doesn't forward to other zones
+    wireguard_ip: 10.77.0.2
+    public_key: "<LAB512_OFFICE_PUBKEY>"
+    constitution:
+      # Runner can execute but not issue permits
+      can_issue_permits: false
+      can_execute: true
+      sandbox_profile: "runner.sb"
+      max_job_duration_sec: 180
+      egress_whitelist:
+        - 10.77.0.1:8080  # UBL API
+        - 10.77.0.1:9000  # MinIO
+
+  # LAB 8GB - Workstation/Dev Zone
+  - id: office:lab8gb
+    name: "LAB 8GB Dev Office"
+    zone: LAB_8GB
+    role: workstation
+    capabilities:
+      - development
+      - manual_testing
+      - llm_interaction
+    allowed_targets:
+      - LAB_256  # Can talk to Gateway
+    wireguard_ip: 10.77.0.10
+    public_key: "<LAB8GB_OFFICE_PUBKEY>"
+    constitution:
+      # Workstation has limited capabilities
+      can_issue_permits: false
+      can_execute: false
+      llm_allowed: true
+      llm_operations:
+        - Observation
+        - Conservation
+      # NEVER Entropy/Evolution for LLM-related operations
+
+# Zone network topology
+zones:
+  LAB_256:
+    description: "API Gateway Zone"
+    wireguard_subnet: 10.77.0.1/32
+    services:
+      - name: UBL API
+        port: 8080
+      - name: MinIO
+        port: 9000
+      - name: PostgreSQL
+        port: null  # Socket-only, no TCP
+
+  LAB_512:
+    description: "Sandbox Runner Zone"
+    wireguard_subnet: 10.77.0.2/32
+    services:
+      - name: Runner Agent
+        port: null  # Pull-only, no listening port
+
+  LAB_8GB:
+    description: "Development Workstation Zone"
+    wireguard_subnet: 10.77.0.10/32
+    services:
+      - name: Dev Tools
+        port: null
+

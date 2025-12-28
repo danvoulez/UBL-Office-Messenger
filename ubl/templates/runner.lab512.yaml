@@ -1,0 +1,6 @@
+runner:
+  listen: "0.0.0.0:9090"
+  sandbox: "gvisor"   # ou nsjail
+  egress_allow: ["registry.acme.local:443","kubernetes.default.svc:443"]
+  tmpfs_quota_mb: 512
+  receipts_dir: "/opt/ubl/receipts"

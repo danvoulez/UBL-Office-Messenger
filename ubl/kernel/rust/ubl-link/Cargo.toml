@@ -1,0 +1,11 @@
+[package]
+name = "ubl-link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UBL Link - The only interface of tangency (SPEC-UBL-LINK v1.0)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

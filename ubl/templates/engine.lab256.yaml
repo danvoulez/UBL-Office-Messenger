@@ -1,0 +1,20 @@
+engine:
+  mode: gateway
+  listen: "0.0.0.0:8080"
+ledger:
+  driver: postgres
+  dsn: "postgresql://ubl_dev@localhost:5432/ubl_dev"
+storage:
+  endpoint: "http://127.0.0.1:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  buckets:
+    repos: "vault-repos"
+    workspaces: "vault-workspaces"
+    deploy: "vault-deploy"
+policy:
+  repo: "/opt/ubl/etc/policies/tdln.repo.wasm"
+  workspace: "/opt/ubl/etc/policies/tdln.workspace.wasm"
+  deploy: "/opt/ubl/etc/policies/tdln.deploy.wasm"
+identity:
+  passkey: enabled

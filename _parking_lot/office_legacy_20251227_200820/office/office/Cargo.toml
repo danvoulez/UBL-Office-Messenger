@@ -1,0 +1,82 @@
+[package]
+name = "office"
+version = "0.1.0"
+edition = "2021"
+authors = ["UBL Team"]
+description = "LLM Operating System - Runtime for LLM Entities implementing Universal Historical Specification"
+license = "MIT"
+repository = "https://github.com/ubl/office"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP Server
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP Client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+# Cryptography
+ed25519-dalek = { version = "2", features = ["serde", "rand_core"] }
+blake3 = "1"
+rand = "0.8"
+hex = "0.4"
+
+# UBL Core (for proper signing and atom canonicalization)
+ubl-kernel = { path = "../../ubl/kernel/rust/ubl-kernel" }
+ubl-atom = { path = "../../ubl/kernel/rust/ubl-atom" }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Regex (for PII detection)
+regex = "1"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Configuration
+config = "0.14"
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+tokio-stream = "0.1"
+async-stream = "0.3"
+
+# WebSocket
+tokio-tungstenite = "0.21"
+
+# Database (optional, for persistence)
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "uuid"], optional = true }
+
+# Rate limiting
+governor = "0.6"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3"
+
+[features]
+default = []
+postgres = ["sqlx"]
+
+[[bin]]
+name = "office"
+path = "src/main.rs"

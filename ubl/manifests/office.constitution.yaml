@@ -1,0 +1,51 @@
+# Office Constitution v1.1
+# AOP do Office - regras complementares, nunca substitutas ao UBL
+# Precedência: UBL > Office
+
+version: 1.1
+precedence: "UBL > Office"
+
+# Modos de operação e limites de risco
+allow_modes:
+  operator:
+    max_risk: "L2"
+    require_step_up: false
+  admin:
+    max_risk: "L5"
+    require_step_up: true
+
+# Pre-flight checks (AOP)
+pre_flight:
+  require_diff_for:
+    - "git.registry.merge_protected"
+    - "system.security.patch"
+  maintenance_windows:
+    - target: "LAB_256"
+      days: ["Sun"]
+      start: "02:00"
+      end: "03:00"
+      block: true
+
+# Listas de bloqueio (Office pode restringir, nunca afrouxar)
+denylists:
+  job_types: []
+  targets: []
+
+# Bindings obrigatórios em todo Permit (fail-closed)
+bindings_required:
+  - "permit.scopes.tenant_id"
+  - "permit.scopes.jobType"
+  - "permit.scopes.target"
+  - "permit.scopes.subject_hash"
+  - "permit.scopes.policy_hash"
+
+# Princípios codificados
+principles:
+  - "Office não cria identidades próprias"
+  - "Office não mantém ledger alternativo"
+  - "Office não emite políticas paralelas"
+  - "Office não autoriza execução sem Permit válido do UBL"
+  - "Mais estrito é permitido; mais frouxo é proibido"
+
+
+

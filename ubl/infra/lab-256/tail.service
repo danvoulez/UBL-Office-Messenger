@@ -1,0 +1,4 @@
+[Unit]
+Description=UBL Tail SSE
+[Service]
+ExecStart=/usr/bin/ubl-tail

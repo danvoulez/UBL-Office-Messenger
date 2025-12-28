@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS idempotency_key (container_id CHAR(64), idem_key TEXT, payload_hash CHAR(64), response_json JSONB, created_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'UTC'), ttl_seconds INTEGER DEFAULT 86400, PRIMARY KEY(container_id, idem_key));

@@ -1,0 +1,23 @@
+{
+  "name": "ubl-runner",
+  "version": "1.0.0",
+  "description": "UBL Runner - Pull-only job executor for LAB 512",
+  "main": "pull_only.ts",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx pull_only.ts",
+    "dev": "npx tsx watch pull_only.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
+
+

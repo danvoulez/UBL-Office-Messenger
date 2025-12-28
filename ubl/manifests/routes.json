@@ -1,0 +1,50 @@
+{
+  "routes": [
+    {
+      "from": "C.Messenger",
+      "to": "C.Policy",
+      "classes": [
+        "Observation",
+        "Conservation",
+        "Entropy",
+        "Evolution"
+      ]
+    },
+    {
+      "from": "C.Messenger",
+      "to": "C.Pacts",
+      "classes": [
+        "Observation"
+      ]
+    },
+    {
+      "from": "C.Messenger",
+      "to": "C.Artifacts",
+      "classes": [
+        "Observation",
+        "Conservation"
+      ]
+    },
+    {
+      "from": "C.Runner",
+      "to": "C.Messenger",
+      "classes": [
+        "Observation"
+      ]
+    }
+  ],
+  "rules": {
+    "no_cross_container_imports": true,
+    "signing_bytes_strict": true,
+    "membrane_errors": [
+      "InvalidVersion",
+      "InvalidSignature",
+      "InvalidTarget",
+      "RealityDrift",
+      "SequenceMismatch",
+      "PhysicsViolation",
+      "PactViolation",
+      "UnauthorizedEvolution"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+[Unit]
+Description=UBL API
+[Service]
+ExecStart=/usr/bin/ubl-api

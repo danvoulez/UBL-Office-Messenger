@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "wasm_hash": "<pin-after-build>",
+  "scope": [
+    "C.Messenger"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": "2.0",
+  "containers": [
+    {
+      "id_pattern": "repo://{tenant}/{repo}",
+      "profile": "static",
+      "storage": {
+        "bucket": "vault-repos"
+      },
+      "runners": []
+    },
+    {
+      "id_pattern": "workspace://{tenant}/{workspace}",
+      "profile": "live",
+      "storage": {
+        "bucket": "vault-workspaces"
+      },
+      "runners": [
+        "lab512"
+      ]
+    },
+    {
+      "id_pattern": "deploy://{tenant}/{app}/env/{env}",
+      "profile": "live",
+      "storage": {
+        "bucket": "vault-deploy"
+      },
+      "runners": [
+        "lab512"
+      ]
+    }
+  ]
+}

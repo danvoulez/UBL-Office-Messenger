@@ -1,0 +1,7 @@
+{
+  "kind": "git/object",
+  "tenant": "acme",
+  "repo": "billing",
+  "sha256": "b2a5...",
+  "size": 12345
+}

@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info: { title: UBL 2.0 Gateway API, version: "2.0.0" }
+servers: [ { url: http://localhost:8080 } ]
+paths:
+  /id/register/begin:
+    post:
+      summary: Begin WebAuthn registration
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { username: { type: string } }, required: [username] } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterBeginResponse' } } } }
+        "429": { description: rate limited, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/register/finish:
+    post:
+      summary: Finish WebAuthn registration
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterFinishRequest' } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Subject' } } } }
+        "400": { description: bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/login/begin:
+    post:
+      summary: Begin WebAuthn login
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { username: { type: string } }, required: [username] } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/LoginBeginResponse' } } } }
+        "429": { description: rate limited, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/login/finish:
+    post:
+      summary: Finish WebAuthn login
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginFinishRequest' } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        "401": { description: unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/stepup/begin:
+    post:
+      summary: Begin WebAuthn step-up (admin)
+      security: [ { cookieAuth: [] } ]
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StepupBeginResponse' } } } }
+        "401": { description: unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/stepup/finish:
+    post:
+      summary: Finish WebAuthn step-up (admin)
+      security: [ { cookieAuth: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginFinishRequest' } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StepupSession' } } } }
+        "401": { description: unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /id/session/token:
+    post:
+      summary: Exchange cookie session for short-lived JWT (Ed25519)
+      security: [ { cookieAuth: [] } ]
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/JWT' } } } }
+        "401": { description: unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /link/validate:
+    post:
+      summary: Validate link against Membrane (no side effects)
+      security: [ { bearerAuth: [] }, { cookieAuth: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LinkCommit' } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ValidationResult' } } } }
+        "409": { description: rejected, content: { application/json: { schema: { $ref: '#/components/schemas/MembraneError' } } } }
+  /link/commit:
+    post:
+      summary: Validate and append link (single source of truth)
+      security: [ { bearerAuth: [] }, { cookieAuth: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LinkCommit' } } } }
+      responses:
+        "200": { description: committed, content: { application/json: { schema: { $ref: '#/components/schemas/LedgerEntry' } } } }
+        "409": { description: rejected, content: { application/json: { schema: { $ref: '#/components/schemas/MembraneError' } } } }
+  /ledger/{container_id}/tail:
+    get:
+      summary: SSE tail for container
+      parameters: [ { in: path, name: container_id, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: text/event-stream (SSE)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                event:
+                  value: |
+                    event: ledger
+                    data: {"container_id":"repo://acme/billing","sequence":42,"link_hash":"...","entry_hash":"..."}
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    cookieAuth: { type: apiKey, in: cookie, name: session }
+  schemas:
+    PactProof:
+      type: object
+      properties:
+        pact_id: { type: string }
+        signatures:
+          type: array
+          items: { type: string }
+    LinkCommit:
+      type: object
+      required: [version,container_id,expected_sequence,previous_hash,atom_hash,intent_class,physics_delta,author_pubkey,signature]
+      properties:
+        version: { type: integer, example: 1 }
+        container_id: { type: string, example: "workspace://acme/dan-42" }
+        expected_sequence: { type: integer, example: 7 }
+        previous_hash: { type: string, example: "b3e1..." }
+        atom_hash: { type: string, example: "a911..." }
+        intent_class: { type: string, enum: [Observation,Conservation,Entropy,Evolution] }
+        physics_delta: { type: string, description: "i128 serialized as string", example: "0" }
+        pact: { $ref: '#/components/schemas/PactProof' }
+        author_pubkey: { type: string }
+        signature: { type: string }
+    ValidationResult:
+      type: object
+      properties:
+        accepted: { type: boolean }
+        error: { $ref: '#/components/schemas/MembraneError' }
+    LedgerEntry:
+      type: object
+      properties:
+        container_id: { type: string }
+        sequence: { type: integer }
+        link_hash: { type: string }
+        previous_hash: { type: string }
+        entry_hash: { type: string }
+        ts_unix_ms: { type: integer }
+        metadata: { type: object, additionalProperties: true }
+    MembraneError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [InvalidVersion,InvalidSignature,InvalidTarget,RealityDrift,SequenceMismatch,PhysicsViolation,PactViolation,UnauthorizedEvolution]
+        message: { type: string }
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+    RegisterBeginResponse:
+      type: object
+      properties: { challenge_id: { type: string }, options: { type: object } }
+    RegisterFinishRequest:
+      type: object
+      properties: { challenge_id: { type: string }, attestation: { type: object } }
+      required: [challenge_id, attestation]
+    LoginBeginResponse:
+      type: object
+      properties: { challenge_id: { type: string }, options: { type: object } }
+    LoginFinishRequest:
+      type: object
+      properties: { challenge_id: { type: string }, assertion: { type: object } }
+      required: [challenge_id, assertion]
+    Subject:
+      type: object
+      properties: { sid: { type: string }, kind: { type: string, enum: [person,llm,app] } }
+    Session:
+      type: object
+      properties: { token: { type: string }, flavor: { type: string, enum: [regular,stepup] }, exp: { type: integer } }
+    StepupBeginResponse:
+      type: object
+      properties: { challenge_id: { type: string }, options: { type: object } }
+    StepupSession:
+      type: object
+      properties: { token: { type: string }, exp: { type: integer }, scope: { type: object } }
+    JWT:
+      type: object
+      properties: { jwt: { type: string }, alg: { type: string, example: "EdDSA" }, exp: { type: integer } }

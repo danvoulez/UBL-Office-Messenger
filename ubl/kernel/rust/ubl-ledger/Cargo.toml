@@ -1,0 +1,12 @@
+[package]
+name = "ubl-ledger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UBL Ledger - Append-only data structure (SPEC-UBL-LEDGER v1.0)"
+
+[dependencies]
+ubl-link = { path = "../ubl-link" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

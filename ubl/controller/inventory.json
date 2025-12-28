@@ -1,0 +1,10 @@
+{
+  "lab256": {
+    "bootstrap_ip": "${LAB256_BOOTSTRAP_IP}",
+    "wg_ip": "10.8.0.2"
+  },
+  "lab512": {
+    "bootstrap_ip": "${LAB512_BOOTSTRAP_IP}",
+    "wg_ip": "10.8.0.3"
+  }
+}

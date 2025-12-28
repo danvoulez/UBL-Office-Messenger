@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Example: use UBL CLI to push current directory to a static repo container.
+set -euo pipefail
+BASE_URL="${BASE_URL:-http://localhost:8080}"
+TENANT="${TENANT:-acme}"
+REPO="${REPO:-demo}"
+REF="${REF:-refs/heads/main}"
+SID="${SID:?set SID session token}"
+echo "[UBL] pushing dir=$(pwd) tenant=$TENANT repo=$REPO ref=$REF"
+ubl repo push --tenant "$TENANT" --repo "$REPO" --ref "$REF" --dir "." --base-url "$BASE_URL" --sid "$SID"

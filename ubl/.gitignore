@@ -1,0 +1,87 @@
+# =============================================================================
+# UBL Containers - .gitignore
+# =============================================================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+target/
+dist/
+build/
+.next/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+jwt-key
+jwt-key.pub
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test & Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Rust specific
+*.rs.bk
+Cargo.lock
+*.rlib
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+
+# SQLx offline cache (regenerate with sqlx prepare)
+# .sqlx/
+
+# PostgreSQL dumps
+*.sql.bak
+*.dump
+
+# Package manager locks (keep in sync)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Manifests that may contain local paths
+# *.manifest.json
+
+# Local development
+*.local
+.cache/
+
+# Documentation build
+site/
+_site/

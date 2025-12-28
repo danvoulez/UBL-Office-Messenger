@@ -1,0 +1,109 @@
+# Jobs Allowlist - T.UBL Tenant
+# Defines which job types are permitted and their risk levels
+# Updated: 2025-12-28
+
+tenant_id: T.UBL
+version: "1.1"
+
+# Job type definitions
+jobs:
+  # L0: Read-only, no approval needed
+  - type: query_messages
+    risk: L0
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+    
+  - type: query_jobs
+    risk: L0
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+
+  - type: query_ledger
+    risk: L0
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+
+  # L1: Create/send operations
+  - type: send_message
+    risk: L1
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+    max_delta: 0
+
+  - type: create_job
+    risk: L1
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+    max_delta: 0
+
+  # L2: Moderate operations (may need soft approval)
+  - type: update_job_status
+    risk: L2
+    requires_approval: false
+    allowed_actors: ["llm:*", "app:*", "person:*"]
+    max_delta: 0
+
+  - type: run_test
+    risk: L2
+    requires_approval: false
+    allowed_actors: ["app:runner", "person:*"]
+    max_delta: 0
+
+  # L3: Sensitive operations (require approval)
+  - type: tag_release
+    risk: L3
+    requires_approval: true
+    allowed_actors: ["app:ci", "person:*"]
+    max_delta: 0
+    approval_quorum: 1
+
+  - type: register_container
+    risk: L3
+    requires_approval: true
+    allowed_actors: ["person:*"]
+    max_delta: 0
+    approval_quorum: 1
+
+  # L4: High-risk operations (require step-up + approval)
+  - type: merge_protected
+    risk: L4
+    requires_approval: true
+    requires_stepup: true
+    allowed_actors: ["person:*"]
+    max_delta: 0
+    approval_quorum: 2
+
+  - type: deploy_production
+    risk: L4
+    requires_approval: true
+    requires_stepup: true
+    allowed_actors: ["app:ci"]
+    max_delta: 0
+    approval_quorum: 2
+
+  # L5: Critical operations (require pact + multi-sig)
+  - type: evolution_commit
+    risk: L5
+    requires_approval: true
+    requires_stepup: true
+    requires_pact: true
+    allowed_actors: ["person:*"]
+    approval_quorum: 3
+    # LLMs NEVER allowed for Evolution
+
+  - type: entropy_commit
+    risk: L5
+    requires_approval: true
+    requires_stepup: true
+    requires_pact: true
+    allowed_actors: ["person:*"]
+    approval_quorum: 2
+    # LLMs NEVER allowed for Entropy
+
+# Denylist - explicitly blocked job types
+denylist:
+  - type: "*"
+    actor_pattern: "llm:*"
+    operations: ["Entropy", "Evolution"]
+    reason: "LLMs cannot perform Entropy or Evolution operations"
+

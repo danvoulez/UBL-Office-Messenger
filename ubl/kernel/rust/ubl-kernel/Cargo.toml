@@ -1,0 +1,13 @@
+[package]
+name = "ubl-kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UBL Kernel - Pure cryptography (SPEC-UBL-KERNEL v1.0)"
+
+[dependencies]
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }

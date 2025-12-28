@@ -1,0 +1,8 @@
+{
+  "name": "UBL Messenger - WhatsApp Clone",
+  "description": "A high-fidelity WhatsApp-style messenger using the UBL Foundation design system, powered by Gemini 3 Flash.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

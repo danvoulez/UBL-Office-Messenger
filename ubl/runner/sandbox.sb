@@ -1,0 +1,149 @@
+; UBL Runner Sandbox Profile — macOS sandbox-exec
+; ADR-UBL-Console-001 v1.1
+;
+; Usage: sandbox-exec -f sandbox.sb <command>
+;
+; This profile restricts processes to:
+; - Read-only access to system paths
+; - Write access only to the job work directory
+; - Network access only to whitelisted hosts
+; - No access to user data, keychain, or system modifications
+
+(version 1)
+(deny default)
+
+; ============================================
+; BASIC PERMISSIONS
+; ============================================
+
+; Allow reading basic system files
+(allow file-read*
+    (subpath "/usr/lib")
+    (subpath "/usr/share")
+    (subpath "/System/Library")
+    (subpath "/Library/Frameworks")
+    (subpath "/Applications/Xcode.app")
+    (literal "/dev/null")
+    (literal "/dev/urandom")
+    (literal "/dev/random")
+)
+
+; Allow reading configuration
+(allow file-read-data
+    (literal "/etc/hosts")
+    (literal "/etc/resolv.conf")
+    (literal "/etc/localtime")
+    (literal "/private/etc/hosts")
+    (literal "/private/etc/resolv.conf")
+    (literal "/private/etc/localtime")
+)
+
+; Allow process execution
+(allow process-exec*
+    (subpath "/usr/bin")
+    (subpath "/bin")
+    (subpath "/usr/sbin")
+    (subpath "/sbin")
+)
+
+; ============================================
+; WORK DIRECTORY (Scoped by JOB_ID)
+; ============================================
+
+; Allow full access to the runner work directory
+(allow file*
+    (subpath "/tmp/runner-work")
+)
+
+; ============================================
+; HOMEBREW & TOOLS
+; ============================================
+
+(allow file-read*
+    (subpath "/opt/homebrew")
+    (subpath "/usr/local")
+)
+
+(allow process-exec*
+    (subpath "/opt/homebrew/bin")
+    (subpath "/usr/local/bin")
+)
+
+; ============================================
+; RUST & CARGO
+; ============================================
+
+(allow file-read*
+    (subpath (string-append (param "HOME") "/.cargo"))
+    (subpath (string-append (param "HOME") "/.rustup"))
+)
+
+; ============================================
+; NETWORK (Restricted)
+; ============================================
+
+; Allow DNS resolution
+(allow network-outbound
+    (remote ip "localhost:*")
+    (remote tcp "*:53")
+    (remote udp "*:53")
+)
+
+; Allow connections to internal services only
+; UBL (LAB 256)
+(allow network-outbound
+    (remote tcp "lab256.local:8080")
+    (remote tcp "127.0.0.1:8080")
+)
+
+; MinIO (internal)
+(allow network-outbound
+    (remote tcp "minio.internal:9000")
+    (remote tcp "127.0.0.1:9000")
+)
+
+; Ollama (LLM inference)
+(allow network-outbound
+    (remote tcp "ollama.internal:11434")
+    (remote tcp "127.0.0.1:11434")
+)
+
+; ============================================
+; DENIED (Explicit)
+; ============================================
+
+; No keychain access
+(deny file* (subpath "/Library/Keychains"))
+(deny file* (subpath (string-append (param "HOME") "/Library/Keychains")))
+
+; No user data access
+(deny file* (subpath (string-append (param "HOME") "/Documents")))
+(deny file* (subpath (string-append (param "HOME") "/Desktop")))
+(deny file* (subpath (string-append (param "HOME") "/Downloads")))
+
+; No SSH keys
+(deny file* (subpath (string-append (param "HOME") "/.ssh")))
+
+; No GPG keys
+(deny file* (subpath (string-append (param "HOME") "/.gnupg")))
+
+; No application support (sensitive app data)
+(deny file* (subpath (string-append (param "HOME") "/Library/Application Support")))
+
+; ============================================
+; SYSTEM
+; ============================================
+
+; Allow basic system operations
+(allow sysctl-read)
+(allow mach-lookup)
+(allow signal (target self))
+
+; Allow process forking for subprocesses
+(allow process-fork)
+
+; Allow memory operations
+(allow file-map-executable)
+
+
+

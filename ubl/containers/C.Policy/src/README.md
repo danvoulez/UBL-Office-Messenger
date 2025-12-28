@@ -1,0 +1,1 @@
+Regras TDLN determinísticas (fonte).

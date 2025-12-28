@@ -1,0 +1,29 @@
+![ubl-link • * Kernel (neutro)](https://img.shields.io/badge/ubl-link-*%20Kernel%20(neutro)-lightgrey)
+
+# ubl-link — Você está aqui
+
+**Path:** `kernel/rust/ubl-link`  
+**Role/Cor:** Kernel (neutro)  
+**Zona:** LAB 256 (build)  
+
+## Credenciais necessárias
+- Build standard; sem credenciais em tempo de compilação.
+
+
+## Função
+Gera `signing_bytes` e tipos de LinkCommit (sem pact/author/signature)
+
+## Entradas permitidas (Inbound)
+- Funções chamadas pelos containers via API/SDK
+
+## Saídas permitidas (Outbound)
+- Postgres (apenas via ubl-ledger) quando aplicável
+
+## Dados que passam por aqui
+- Bytes canônicos, hashes, erros canônicos
+
+## Dicas
+- Snapshot tests: qualquer byte fora de lugar tem que quebrar os testes.
+
+---
+_Navegação:_ [Resumo](../../SUMMARY.md  ) · [Guia](GUIDE.md)

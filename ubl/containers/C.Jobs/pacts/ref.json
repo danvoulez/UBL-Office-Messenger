@@ -1,0 +1,17 @@
+{
+  "required": [
+    {
+      "pact_id": "job-approval-threshold",
+      "scope": "C.Jobs",
+      "threshold": 1,
+      "risk_level": "L3",
+      "rules": [
+        {
+          "condition": "job.estimated_value > 10000.00",
+          "then": "require_approval"
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ubl.world/schemas/asc.v1.json",
+  "title": "Agent Signing Certificate (ASC)",
+  "description": "Token granting limited permissions to agents (LLMs, Apps)",
+  "type": "object",
+  "required": ["agent_id", "containers", "operations", "max_physics_delta", "exp", "sig"],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "description": "Subject ID of the agent (e.g., ubl:sid:llm:gpt4, ubl:sid:app:runner)",
+      "pattern": "^ubl:sid:(llm|app):[a-z0-9_-]+$"
+    },
+    "containers": {
+      "type": "array",
+      "description": "List of containers the agent can commit to",
+      "items": {
+        "type": "string",
+        "pattern": "^C\\.[A-Z][a-zA-Z]+$"
+      },
+      "minItems": 1,
+      "examples": [["C.Messenger", "C.Jobs"]]
+    },
+    "operations": {
+      "type": "array",
+      "description": "Allowed intent classes. LLMs can NEVER have Entropy/Evolution.",
+      "items": {
+        "type": "string",
+        "enum": ["Observation", "Conservation", "Entropy", "Evolution"]
+      },
+      "minItems": 1
+    },
+    "max_physics_delta": {
+      "type": "integer",
+      "description": "Maximum absolute physics delta allowed. Set to 0 for read-only.",
+      "minimum": 0,
+      "default": 0
+    },
+    "exp": {
+      "type": "integer",
+      "description": "Expiration time (Unix epoch seconds). ASCs are short-lived.",
+      "minimum": 0
+    },
+    "sig": {
+      "type": "string",
+      "description": "Ed25519 signature from the UBL ID Authority",
+      "pattern": "^ed25519:[a-f0-9]{128}$"
+    }
+  },
+  "additionalProperties": false,
+  
+  "examples": [
+    {
+      "agent_id": "ubl:sid:llm:gpt4-worker",
+      "containers": ["C.Messenger", "C.Jobs"],
+      "operations": ["Observation", "Conservation"],
+      "max_physics_delta": 0,
+      "exp": 1735430400,
+      "sig": "ed25519:abcd1234..."
+    }
+  ],
+  
+  "$defs": {
+    "llm_asc": {
+      "description": "ASC template for LLM agents - NEVER includes Entropy/Evolution",
+      "allOf": [
+        { "$ref": "#" },
+        {
+          "properties": {
+            "operations": {
+              "items": {
+                "enum": ["Observation", "Conservation"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
