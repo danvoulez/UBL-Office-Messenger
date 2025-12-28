@@ -4,10 +4,9 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use blake3::Hasher;
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use rand::RngCore;
 use sqlx::PgPool;
-use std::sync::OnceLock;
 
 // =============================================================================
 // RANDOM & UUID
@@ -32,56 +31,27 @@ pub fn uuid_v4() -> String {
 // =============================================================================
 // ADMIN SIGNING KEY (Console Permits)
 // =============================================================================
-
-/// Admin signing key for Console permits.
-/// In production, load from secure storage (HSM, Keychain, Vault).
-/// For now, derived deterministically from env or generated once.
-static ADMIN_KEY: OnceLock<SigningKey> = OnceLock::new();
-
-fn get_admin_key() -> &'static SigningKey {
-    ADMIN_KEY.get_or_init(|| {
-        // Try to load from env (hex-encoded 32-byte seed)
-        if let Ok(hex_seed) = std::env::var("UBL_ADMIN_SIGNING_KEY") {
-            let seed_bytes = hex::decode(&hex_seed).expect("Invalid UBL_ADMIN_SIGNING_KEY hex");
-            let seed: [u8; 32] = seed_bytes.try_into().expect("UBL_ADMIN_SIGNING_KEY must be 32 bytes");
-            return SigningKey::from_bytes(&seed);
-        }
-
-        // Fallback: generate deterministically from a known seed (DEV ONLY!)
-        tracing::warn!("⚠️  Using development admin signing key! Set UBL_ADMIN_SIGNING_KEY in production.");
-        let mut seed = [0u8; 32];
-        // Deterministic for dev reproducibility
-        let dev_seed = blake3::hash(b"UBL_DEV_ADMIN_KEY_DO_NOT_USE_IN_PRODUCTION");
-        seed.copy_from_slice(dev_seed.as_bytes());
-        SigningKey::from_bytes(&seed)
-    })
-}
+// Gemini P0 #1: Uses persistent keystore instead of ephemeral env vars
 
 /// Get the admin public key (hex-encoded)
 pub fn admin_pubkey_hex() -> String {
-    hex::encode(get_admin_key().verifying_key().as_bytes())
+    crate::keystore::get_public_key_hex("admin")
 }
 
 /// Sign a message with the admin key
 pub fn sign_admin_permit(msg: &[u8]) -> Vec<u8> {
-    let sig = get_admin_key().sign(msg);
-    sig.to_bytes().to_vec()
+    let sig_tagged = crate::keystore::sign("admin", msg);
+    // Extract raw signature bytes from "ed25519:<b64>"
+    let b64 = sig_tagged.trim_start_matches("ed25519:");
+    URL_SAFE_NO_PAD.decode(b64).unwrap_or_default()
 }
 
 /// Verify an admin permit signature
 /// Format: "ed25519:<base64url_signature>"
 pub fn verify_admin_permit_sig(msg: &[u8], sig_tagged: &str) -> Result<(), &'static str> {
-    if !sig_tagged.starts_with("ed25519:") {
-        return Err("InvalidSignatureFormat");
-    }
-    let b64 = sig_tagged.trim_start_matches("ed25519:");
-    let sig_bytes = URL_SAFE_NO_PAD.decode(b64).map_err(|_| "InvalidBase64")?;
-    
-    let sig_array: [u8; 64] = sig_bytes.try_into().map_err(|_| "InvalidSignatureLength")?;
-    let sig = Signature::from_bytes(&sig_array);
-
-    let pubkey = get_admin_key().verifying_key();
-    pubkey.verify(msg, &sig).map_err(|_| "SignatureVerifyFailed")
+    let pubkey_hex = admin_pubkey_hex();
+    crate::keystore::verify(&pubkey_hex, msg, sig_tagged)
+        .map_err(|_| "SignatureVerifyFailed")
 }
 
 // =============================================================================

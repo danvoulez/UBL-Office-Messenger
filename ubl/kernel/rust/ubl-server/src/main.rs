@@ -46,6 +46,8 @@ mod registry_v1;
 mod messenger_v1;
 mod crypto;
 mod webauthn_store;
+mod keystore;
+mod snapshots;
 
 use axum::{
     extract::{Path, State},
@@ -455,6 +457,18 @@ async fn main() -> anyhow::Result<()> {
                 .add_directive("ubl_server=info".parse().unwrap()),
         )
         .init();
+
+    // Initialize KeyStore (Gemini P0 #1)
+    keystore::init();
+    info!("🔑 KeyStore initialized");
+    
+    // Load or create admin key (used for signing permits)
+    let _admin_pubkey = keystore::get_public_key_hex("admin");
+    info!("🔐 Admin public key: {}", _admin_pubkey);
+    
+    // Initialize Snapshots (Gemini P1 #4)
+    snapshots::init();
+    info!("📸 Snapshots initialized");
 
     // Connect to PostgreSQL
     let database_url = std::env::var("DATABASE_URL")

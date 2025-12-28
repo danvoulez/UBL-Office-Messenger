@@ -9,9 +9,11 @@
 //! - All actions go through permits
 //! - No direct database access
 
+pub mod llm;
 pub mod middleware;
 pub mod ubl_client;
 
+pub use llm::{LlmClient, LlmProvider, Message, MessageRole, CompletionOptions, LlmError};
 pub use middleware::constitution;
 pub use ubl_client::UblClient;
 

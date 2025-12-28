@@ -29,6 +29,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
 once_cell = "1"
 
+# Async traits
+async-trait = "0.1"
+
 # NO sqlx or database dependencies!
 # Office communicates ONLY via UBL Gateway HTTP API
 
