@@ -381,12 +381,25 @@ async fn route_commit(
 
 /// GET /ledger/:container_id/tail
 /// SSE stream with PostgreSQL LISTEN/NOTIFY (PR10)
+/// Supports Last-Event-ID header for reconnection (Gemini P2 #7)
 async fn route_tail(
     State(state): State<AppState>,
     Path(container_id): Path<String>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
-    info!("📡 SSE tail requested for: {}", container_id);
-    sse::sse_tail(state.pool.clone(), container_id).await
+    // Parse Last-Event-ID for reconnection support
+    let last_event_id = headers
+        .get("Last-Event-ID")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok());
+    
+    if let Some(seq) = last_event_id {
+        info!("📡 SSE tail requested for: {} (resuming from seq {})", container_id, seq);
+    } else {
+        info!("📡 SSE tail requested for: {}", container_id);
+    }
+    
+    sse::sse_tail(state.pool.clone(), container_id, last_event_id).await
 }
 
 /// GET /atom/:hash
