@@ -44,6 +44,8 @@ mod policy_registry;
 mod console_v1;
 mod registry_v1;
 mod messenger_v1;
+mod crypto;
+mod webauthn_store;
 
 use axum::{
     extract::{Path, State},
@@ -513,8 +515,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(id_session_token::router().with_state(state.clone()))
         .merge(repo_routes::router().with_state(state.clone()))
         .nest("/query", projections::projection_router().with_state(projection_state))
-        // Console v1.1 (ADR-001)
-        .merge(console_v1::routes(pool.clone()))
+        // Console v1.1 (ADR-001) — with step-up WebAuthn
+        .merge(console_v1::routes(pool.clone(), webauthn.clone()))
         // Registry v1.1 (ADR-002)
         .merge(registry_v1::routes(pool.clone()))
         // Messenger v1 (C.Messenger boundary)

@@ -1,10 +1,17 @@
 //! Console API v1.1 — ADR-UBL-Console-001
 //!
+//! SECURITY-HARDENED VERSION with:
+//! - Real WebAuthn step-up for L4/L5
+//! - Permit binding_hash cryptographic commitment
+//! - Single-use atomic permit consumption
+//! - Runner signature verification on receipts
+//!
 //! Endpoints:
-//! - POST /v1/policy/permit  → Emit Permit
-//! - POST /v1/commands/issue → Register Command (pending=1)
-//! - GET  /v1/query/commands → List pending commands for Runner
-//! - POST /v1/exec.finish    → Register Receipt, mark command done
+//! - POST /v1/policy/permit      → Emit Permit (step-up required for L4/L5)
+//! - POST /v1/id/stepup/begin    → Begin step-up (returns WebAuthn challenge)
+//! - POST /v1/commands/issue     → Register Command (atomic single-use)
+//! - GET  /v1/query/commands     → List pending commands for Runner
+//! - POST /v1/exec.finish        → Register Receipt (runner signature required)
 
 use axum::{
     extract::{Query, State},
@@ -13,139 +20,136 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-use uuid::Uuid;
+use sqlx::{PgPool, Postgres, Transaction, Row};
+use webauthn_rs::prelude::*;
 
-/// State for console routes
+use crate::crypto;
+use crate::webauthn_store;
+
+// =============================================================================
+// STATE
+// =============================================================================
+
 #[derive(Clone)]
 pub struct ConsoleState {
     pub pool: PgPool,
+    pub webauthn: Webauthn,
 }
 
-/// Create console v1.1 routes
-pub fn routes(pool: PgPool) -> Router {
-    let state = ConsoleState { pool };
+// =============================================================================
+// ROUTES
+// =============================================================================
+
+pub fn routes(pool: PgPool, webauthn: Webauthn) -> Router {
+    let state = ConsoleState { pool, webauthn };
     Router::new()
         .route("/v1/policy/permit", post(issue_permit))
+        .route("/v1/id/stepup/begin", post(stepup_begin))
         .route("/v1/commands/issue", post(issue_command))
         .route("/v1/query/commands", get(query_commands))
         .route("/v1/exec.finish", post(exec_finish))
         .with_state(state)
 }
 
-// ============ Types ============
+// =============================================================================
+// TYPES
+// =============================================================================
 
 #[derive(Debug, Deserialize)]
 pub struct PermitRequest {
-    pub tenant_id: String,
-    pub actor_id: String,
-    pub intent: String,
-    pub context: serde_json::Value,
-    #[serde(rename = "jobType")]
-    pub job_type: String,
-    pub params: serde_json::Value,
+    pub office: String,
+    pub action: String,
     pub target: String,
-    pub approval_ref: Option<String>,
-    /// Risk level: "L0" through "L5"
-    /// L4/L5 require WebAuthn step-up
+    pub args: serde_json::Value,
+    pub plan: serde_json::Value,
     #[serde(default = "default_risk")]
     pub risk: String,
-    /// WebAuthn assertion for L4/L5 step-up
+    /// WebAuthn assertion for L4/L5 step-up (from navigator.credentials.get)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webauthn_assertion: Option<serde_json::Value>,
+    pub stepup_assertion: Option<serde_json::Value>,
 }
 
-fn default_risk() -> String { "L0".to_string() }
-
-#[derive(Debug, Serialize)]
-pub struct PermitScopes {
-    pub tenant_id: String,
-    #[serde(rename = "jobType")]
-    pub job_type: String,
-    pub target: String,
-    pub subject_hash: String,
-    pub policy_hash: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub approval_ref: Option<String>,
+fn default_risk() -> String {
+    "L0".to_string()
 }
 
 #[derive(Debug, Serialize)]
 pub struct Permit {
-    pub aud: String,
     pub jti: String,
-    pub exp: u64,
+    pub office: String,
+    pub action: String,
+    pub target: String,
+    pub args: serde_json::Value,
+    pub risk: String,
+    pub plan_hash: String,
+    pub nonce: String,
+    pub issued_at_ms: i64,
+    pub exp_ms: i64,
+    pub binding_hash: String,
+    pub approver: String,
     pub sig: String,
-    pub scopes: PermitScopes,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PermitResponse {
     pub permit: Permit,
-    pub policy_hash: String,
-    pub subject_hash: String,
     pub allowed: bool,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CommandEnvelope {
-    pub jti: String,
-    pub tenant_id: String,
-    #[serde(rename = "jobId")]
-    pub job_id: String,
-    #[serde(rename = "jobType")]
-    pub job_type: String,
-    pub params: serde_json::Value,
-    pub subject_hash: String,
-    pub policy_hash: String,
-    pub permit: serde_json::Value,
-    pub target: String,
-    pub office_id: String,
+pub struct StepUpBeginRequest {
+    pub user_id: String,
+    pub binding_hash: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommandIssueRequest {
+    pub permit_jti: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CommandIssued {
+    pub command_id: String,
+    pub pending: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct QueryCommandsParams {
-    pub tenant_id: String,
     pub target: String,
     #[serde(default = "default_pending")]
-    pub pending: i32,
+    pub pending: bool,
     #[serde(default = "default_limit")]
     pub limit: i32,
 }
 
-fn default_pending() -> i32 { 1 }
-fn default_limit() -> i32 { 5 }
+fn default_pending() -> bool { true }
+fn default_limit() -> i32 { 10 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct CommandRow {
-    pub jti: String,
-    pub tenant_id: String,
-    pub job_id: String,
-    pub job_type: String,
-    pub params: serde_json::Value,
-    pub subject_hash: String,
-    pub policy_hash: String,
-    pub permit: serde_json::Value,
+    pub command_id: String,
+    pub permit_jti: String,
+    pub office: String,
+    pub action: String,
     pub target: String,
-    pub office_id: String,
-    pub pending: i32,
-    pub issued_at: i64,
+    pub args: serde_json::Value,
+    pub risk: String,
+    pub plan_hash: String,
+    pub binding_hash: String,
+    pub pending: bool,
+    pub created_at_ms: i64,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Receipt {
-    pub tenant_id: String,
-    #[serde(rename = "jobId")]
-    pub job_id: String,
-    pub status: String,
-    pub finished_at: u64,
+pub struct ExecFinishRequest {
+    pub command_id: String,
+    pub runner_id: String,
+    pub status: String, // "OK" | "ERROR"
     pub logs_hash: String,
-    #[serde(default)]
-    pub artifacts: Vec<String>,
-    #[serde(default)]
-    pub usage: serde_json::Value,
-    #[serde(default)]
-    pub error: String,
+    pub ret: serde_json::Value,
+    pub sig_runner: String, // "ed25519:<base64url>"
 }
 
 #[derive(Debug, Serialize)]
@@ -153,258 +157,530 @@ struct ErrorResponse {
     error: String,
 }
 
-// ============ Handlers ============
+// =============================================================================
+// HANDLERS
+// =============================================================================
+
+/// POST /v1/id/stepup/begin — Begin step-up authentication
+/// Returns WebAuthn challenge tied to a binding_hash
+async fn stepup_begin(
+    State(state): State<ConsoleState>,
+    Json(req): Json<StepUpBeginRequest>,
+) -> Result<Json<webauthn_store::StepUpBeginResponse>, (StatusCode, String)> {
+    let inner_req = webauthn_store::StepUpBeginRequest {
+        user_id: req.user_id,
+        binding_hash: req.binding_hash,
+    };
+    let response = webauthn_store::begin_stepup(&state.pool, &state.webauthn, &inner_req).await?;
+    Ok(Json(response))
+}
 
 /// POST /v1/policy/permit — Issue a Permit
-/// SECURITY: L4/L5 risk levels require WebAuthn step-up authentication
+/// SECURITY: L4/L5 require WebAuthn step-up with binding_hash verification
 async fn issue_permit(
     State(state): State<ConsoleState>,
     Json(req): Json<PermitRequest>,
 ) -> impl IntoResponse {
-    // CRITICAL: L4/L5 require WebAuthn step-up (Passkey)
+    let pool = &state.pool;
+    let now_ms = now_millis() as i64;
+
+    // 1. Compute plan_hash
+    let plan_hash = crypto::canonical_plan_hash(&req.plan);
+
+    // 2. Generate nonce
+    let nonce_bytes = crypto::rand_bytes_16();
+    let nonce = URL_SAFE_NO_PAD.encode(&nonce_bytes);
+
+    // 3. Compute TTL based on risk
+    let ttl_ms = get_ttl_for_risk(&req.risk);
+    let exp_ms = now_ms + ttl_ms;
+
+    // 4. Compute binding_hash (cryptographic commitment)
+    let binding_hash = crypto::permit_binding_hash(
+        &req.office,
+        &req.action,
+        &req.target,
+        &req.args,
+        &req.risk,
+        &plan_hash,
+        &nonce,
+        exp_ms,
+    );
+
+    // 5. Step-up required for L4/L5
     let needs_stepup = req.risk == "L4" || req.risk == "L5";
+    let approver: String;
+
     if needs_stepup {
-        if req.webauthn_assertion.is_none() {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ErrorResponse { 
-                    error: "Step-up authentication required for L4/L5 operations".to_string() 
-                }),
-            ).into_response();
-        }
-        
-        // TODO: Validate WebAuthn assertion with stored passkey
-        // For now, we check that the assertion is not empty
-        if let Some(ref assertion) = req.webauthn_assertion {
-            if assertion.is_null() || (assertion.is_object() && assertion.as_object().map(|o| o.is_empty()).unwrap_or(true)) {
+        let assertion = match &req.stepup_assertion {
+            Some(a) if !a.is_null() => a,
+            _ => {
                 return (
                     StatusCode::FORBIDDEN,
-                    Json(ErrorResponse { 
-                        error: "Invalid WebAuthn assertion".to_string() 
+                    Json(ErrorResponse {
+                        error: format!(
+                            "StepUpRequired: {} operations require WebAuthn assertion. \
+                            First call /v1/id/stepup/begin with binding_hash={}",
+                            req.risk, binding_hash
+                        ),
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
-            // In production: validate signature with WebAuthn library
-            tracing::info!("✅ Step-up authentication validated for {} operation", req.risk);
+        };
+
+        // Verify step-up assertion against binding_hash
+        match webauthn_store::verify_stepup_assertion(
+            pool,
+            &state.webauthn,
+            assertion,
+            &binding_hash,
+        )
+        .await
+        {
+            Ok(true) => {
+                approver = webauthn_store::extract_approver_id(assertion)
+                    .unwrap_or_else(|| "webauthn:unknown".into());
+                tracing::info!(
+                    risk = %req.risk,
+                    approver = %approver,
+                    binding_hash = %binding_hash,
+                    "✅ Step-up verified for high-risk permit"
+                );
+            }
+            Ok(false) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorResponse {
+                        error: "StepUpFailed: assertion verification returned false".into(),
+                    }),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Step-up verification failed");
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorResponse {
+                        error: format!("StepUpFailed: {}", e),
+                    }),
+                )
+                    .into_response();
+            }
         }
+    } else {
+        // L0-L3: session-based (would check Authorization header)
+        approver = "session:default".into();
     }
-    
-    // Compute hashes
-    let params_canonical = serde_json::to_string(&req.params).unwrap_or_default();
-    let subject_hash = blake3_hex(&params_canonical);
-    
-    // For now, use a placeholder policy hash (would come from policy registry)
-    let policy_hash = blake3_hex(&format!("policy:{}:{}", req.tenant_id, req.job_type));
-    
-    // TODO: Evaluate policy here - for now, allow all
-    // In production: call PolicyRegistry to evaluate
-    
-    // Generate permit
-    let jti = Uuid::new_v4().to_string();
-    let now_ms = now_millis();
-    let ttl_ms = get_ttl_for_risk(&req.risk);
-    let exp = now_ms + ttl_ms;
-    
-    let scopes = PermitScopes {
-        tenant_id: req.tenant_id.clone(),
-        job_type: req.job_type.clone(),
-        target: req.target.clone(),
-        subject_hash: subject_hash.clone(),
-        policy_hash: policy_hash.clone(),
-        approval_ref: req.approval_ref.clone(),
-    };
-    
-    // Sign the permit (simplified - would use Ed25519 in production)
-    let permit_data = serde_json::to_string(&scopes).unwrap_or_default();
-    let sig = blake3_hex(&format!("{}:{}:{}", permit_data, jti, exp));
-    
-    let permit = Permit {
-        aud: format!("runner:{}", req.target),
-        jti: jti.clone(),
-        exp,
-        sig,
-        scopes,
-    };
-    
-    // Store permit for audit
-    let pool = &state.pool;
-    let _ = sqlx::query(
+
+    // 6. Sign the permit with admin key
+    let sig_bytes = crypto::sign_admin_permit(binding_hash.as_bytes());
+    let sig = format!("ed25519:{}", URL_SAFE_NO_PAD.encode(&sig_bytes));
+
+    // 7. Generate JTI and persist
+    let jti = crypto::uuid_v4();
+
+    let insert_result = sqlx::query(
         r#"
-        INSERT INTO permits (jti, tenant_id, actor_id, job_type, target, subject_hash, policy_hash, approval_ref, exp, issued_at, used)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)
-        ON CONFLICT (jti) DO NOTHING
-        "#
+        INSERT INTO console_permits
+          (jti, office, action, target, args_json, risk, plan_hash, nonce, issued_at_ms, exp_ms, binding_hash, approver, sig, used)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false)
+        "#,
     )
     .bind(&jti)
-    .bind(&req.tenant_id)
-    .bind(&req.actor_id)
-    .bind(&req.job_type)
+    .bind(&req.office)
+    .bind(&req.action)
     .bind(&req.target)
-    .bind(&subject_hash)
-    .bind(&policy_hash)
-    .bind(&req.approval_ref)
-    .bind(exp as i64)
-    .bind(now_ms as i64)
+    .bind(&req.args)
+    .bind(&req.risk)
+    .bind(&plan_hash)
+    .bind(&nonce)
+    .bind(now_ms)
+    .bind(exp_ms)
+    .bind(&binding_hash)
+    .bind(&approver)
+    .bind(&sig)
     .execute(pool)
     .await;
-    
-    let response = PermitResponse {
-        permit,
-        policy_hash,
-        subject_hash,
-        allowed: true,
+
+    if let Err(e) = insert_result {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("DB error: {}", e),
+            }),
+        )
+            .into_response();
+    }
+
+    // 8. Return permit
+    let permit = Permit {
+        jti,
+        office: req.office,
+        action: req.action,
+        target: req.target,
+        args: req.args,
+        risk: req.risk,
+        plan_hash,
+        nonce,
+        issued_at_ms: now_ms,
+        exp_ms,
+        binding_hash,
+        approver,
+        sig,
     };
-    
-    (StatusCode::OK, Json(response))
+
+    (StatusCode::OK, Json(PermitResponse { permit, allowed: true })).into_response()
 }
 
-/// POST /v1/commands/issue — Register a command for Runner to execute
+/// POST /v1/commands/issue — Atomically consume permit and create command
 async fn issue_command(
     State(state): State<ConsoleState>,
-    Json(cmd): Json<CommandEnvelope>,
+    Json(req): Json<CommandIssueRequest>,
 ) -> impl IntoResponse {
     let pool = &state.pool;
-    let now_ms = now_millis();
-    
-    // Validate permit is not expired
-    if let Some(exp) = cmd.permit.get("exp").and_then(|v| v.as_u64()) {
-        if exp < now_ms {
+    let now_ms = now_millis() as i64;
+
+    // Begin transaction for atomic single-use
+    let mut tx: Transaction<Postgres> = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
             return (
-                StatusCode::FORBIDDEN,
-                Json(ErrorResponse { error: "Permit expired".to_string() }),
-            ).into_response();
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e.to_string() }),
+            )
+                .into_response();
         }
-    }
-    
-    // Validate permit jti matches command jti
-    if let Some(permit_jti) = cmd.permit.get("jti").and_then(|v| v.as_str()) {
-        if permit_jti != cmd.jti {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: "Permit jti mismatch".to_string() }),
-            ).into_response();
-        }
-    }
-    
-    // Mark permit as used
-    let _ = sqlx::query("UPDATE permits SET used = true WHERE jti = $1")
-        .bind(&cmd.jti)
-        .execute(pool)
-        .await;
-    
-    // Insert command
-    let result = sqlx::query(
+    };
+
+    // Lock and fetch permit (FOR UPDATE)
+    let permit_row = sqlx::query(
         r#"
-        INSERT INTO commands (jti, tenant_id, job_id, job_type, params, subject_hash, policy_hash, permit, target, office_id, pending, issued_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1, $11)
-        ON CONFLICT (jti) DO NOTHING
-        "#
+        SELECT jti, office, action, target, args_json, risk, plan_hash, nonce,
+               issued_at_ms, exp_ms, binding_hash, approver, sig, used
+        FROM console_permits
+        WHERE jti = $1
+        FOR UPDATE
+        "#,
     )
-    .bind(&cmd.jti)
-    .bind(&cmd.tenant_id)
-    .bind(&cmd.job_id)
-    .bind(&cmd.job_type)
-    .bind(&cmd.params)
-    .bind(&cmd.subject_hash)
-    .bind(&cmd.policy_hash)
-    .bind(&cmd.permit)
-    .bind(&cmd.target)
-    .bind(&cmd.office_id)
-    .bind(now_ms as i64)
-    .execute(pool)
+    .bind(&req.permit_jti)
+    .fetch_optional(&mut *tx)
     .await;
-    
-    match result {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(e) => (
+
+    let row = match permit_row {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse { error: "PermitNotFound".into() }),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e.to_string() }),
+            )
+                .into_response();
+        }
+    };
+
+    // Extract fields
+    let used: bool = row.get("used");
+    let exp_ms: i64 = row.get("exp_ms");
+    let binding_hash: String = row.get("binding_hash");
+    let sig: String = row.get("sig");
+    let office: String = row.get("office");
+    let action: String = row.get("action");
+    let target: String = row.get("target");
+    let args_json: serde_json::Value = row.get("args_json");
+    let risk: String = row.get("risk");
+    let plan_hash: String = row.get("plan_hash");
+
+    // Validate: not used
+    if used {
+        return (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse { error: "PermitAlreadyUsed".into() }),
+        )
+            .into_response();
+    }
+
+    // Validate: not expired
+    if now_ms > exp_ms {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse { error: "PermitExpired".into() }),
+        )
+            .into_response();
+    }
+
+    // Validate: signature
+    if let Err(e) = crypto::verify_admin_permit_sig(binding_hash.as_bytes(), &sig) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse { error: format!("PermitSigInvalid: {}", e) }),
+        )
+            .into_response();
+    }
+
+    // Mark permit as used
+    if let Err(e) = sqlx::query("UPDATE console_permits SET used = true WHERE jti = $1")
+        .bind(&req.permit_jti)
+        .execute(&mut *tx)
+        .await
+    {
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse { error: e.to_string() }),
-        ).into_response(),
+        )
+            .into_response();
     }
+
+    // Create command
+    let command_id = crypto::uuid_v4();
+
+    if let Err(e) = sqlx::query(
+        r#"
+        INSERT INTO console_commands
+          (command_id, permit_jti, office, action, target, args_json, risk, plan_hash, binding_hash, pending, created_at_ms)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)
+        "#,
+    )
+    .bind(&command_id)
+    .bind(&req.permit_jti)
+    .bind(&office)
+    .bind(&action)
+    .bind(&target)
+    .bind(&args_json)
+    .bind(&risk)
+    .bind(&plan_hash)
+    .bind(&binding_hash)
+    .bind(now_ms)
+    .execute(&mut *tx)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e.to_string() }),
+        )
+            .into_response();
+    }
+
+    // Commit transaction
+    if let Err(e) = tx.commit().await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e.to_string() }),
+        )
+            .into_response();
+    }
+
+    (StatusCode::OK, Json(CommandIssued { command_id, pending: true })).into_response()
 }
 
-/// GET /v1/query/commands — List pending commands for a target
+/// GET /v1/query/commands — List pending commands for a target (Runner pulls)
 async fn query_commands(
     State(state): State<ConsoleState>,
     Query(params): Query<QueryCommandsParams>,
 ) -> impl IntoResponse {
     let pool = &state.pool;
-    
-    let commands: Vec<CommandRow> = sqlx::query_as(
+
+    let rows = sqlx::query(
         r#"
-        SELECT jti, tenant_id, job_id, job_type, params, subject_hash, policy_hash, permit, target, office_id, pending, issued_at
-        FROM commands
-        WHERE tenant_id = $1 AND target = $2 AND pending = $3
-        ORDER BY issued_at ASC
-        LIMIT $4
-        "#
+        SELECT command_id, permit_jti, office, action, target, args_json, risk, plan_hash, binding_hash, pending, created_at_ms
+        FROM console_commands
+        WHERE target = $1 AND pending = $2
+        ORDER BY created_at_ms ASC
+        LIMIT $3
+        "#,
     )
-    .bind(&params.tenant_id)
     .bind(&params.target)
     .bind(params.pending)
     .bind(params.limit)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
-    
+
+    let commands: Vec<CommandRow> = rows
+        .into_iter()
+        .map(|row| CommandRow {
+            command_id: row.get("command_id"),
+            permit_jti: row.get("permit_jti"),
+            office: row.get("office"),
+            action: row.get("action"),
+            target: row.get("target"),
+            args: row.get("args_json"),
+            risk: row.get("risk"),
+            plan_hash: row.get("plan_hash"),
+            binding_hash: row.get("binding_hash"),
+            pending: row.get("pending"),
+            created_at_ms: row.get("created_at_ms"),
+        })
+        .collect();
+
     (StatusCode::OK, Json(commands))
 }
 
-/// POST /v1/exec.finish — Register execution receipt
+/// POST /v1/exec.finish — Register execution receipt (must be signed by Runner)
 async fn exec_finish(
     State(state): State<ConsoleState>,
-    Json(receipt): Json<Receipt>,
+    Json(req): Json<ExecFinishRequest>,
 ) -> impl IntoResponse {
     let pool = &state.pool;
-    
-    // Mark command as done (pending = 0)
-    let _ = sqlx::query("UPDATE commands SET pending = 0 WHERE job_id = $1")
-        .bind(&receipt.job_id)
-        .execute(pool)
-        .await;
-    
-    // Insert receipt
-    let artifacts_json = serde_json::to_value(&receipt.artifacts).unwrap_or_default();
-    
-    let result = sqlx::query(
+    let now_ms = now_millis() as i64;
+
+    // Fetch command
+    let cmd_row = sqlx::query(
         r#"
-        INSERT INTO receipts (tenant_id, job_id, status, finished_at, logs_hash, artifacts, usage, error)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (job_id) DO UPDATE SET
-            status = EXCLUDED.status,
-            finished_at = EXCLUDED.finished_at,
-            logs_hash = EXCLUDED.logs_hash,
-            artifacts = EXCLUDED.artifacts,
-            usage = EXCLUDED.usage,
-            error = EXCLUDED.error
-        "#
+        SELECT command_id, permit_jti, binding_hash, pending
+        FROM console_commands
+        WHERE command_id = $1
+        "#,
     )
-    .bind(&receipt.tenant_id)
-    .bind(&receipt.job_id)
-    .bind(&receipt.status)
-    .bind(receipt.finished_at as i64)
-    .bind(&receipt.logs_hash)
-    .bind(&artifacts_json)
-    .bind(&receipt.usage)
-    .bind(&receipt.error)
-    .execute(pool)
+    .bind(&req.command_id)
+    .fetch_optional(pool)
     .await;
-    
-    match result {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(e) => (
+
+    let cmd = match cmd_row {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse { error: "CommandNotFound".into() }),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e.to_string() }),
+            )
+                .into_response();
+        }
+    };
+
+    let pending: bool = cmd.get("pending");
+    if !pending {
+        return (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse { error: "CommandAlreadyFinished".into() }),
+        )
+            .into_response();
+    }
+
+    let permit_jti: String = cmd.get("permit_jti");
+    let binding_hash: String = cmd.get("binding_hash");
+
+    // Build receipt payload for signature verification
+    let receipt_payload = serde_json::json!({
+        "command_id": req.command_id,
+        "permit_jti": permit_jti,
+        "binding_hash": binding_hash,
+        "runner_id": req.runner_id,
+        "status": req.status,
+        "logs_hash": req.logs_hash,
+        "ret": req.ret,
+    });
+
+    // Canonicalize for signature
+    let receipt_bytes = match crypto::ubl_atom_compat::canonicalize(&receipt_payload) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse { error: format!("CanonicalizeError: {}", e) }),
+            )
+                .into_response();
+        }
+    };
+
+    // Verify runner signature
+    if let Err(e) = crypto::verify_runner_sig(pool, &req.runner_id, &receipt_bytes, &req.sig_runner).await {
+        tracing::warn!(error = %e, runner_id = %req.runner_id, "Runner signature verification failed");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse { error: format!("RunnerSigInvalid: {}", e) }),
+        )
+            .into_response();
+    }
+
+    // Begin transaction
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e.to_string() }),
+            )
+                .into_response();
+        }
+    };
+
+    // Mark command as done
+    if let Err(e) = sqlx::query("UPDATE console_commands SET pending = false WHERE command_id = $1")
+        .bind(&req.command_id)
+        .execute(&mut *tx)
+        .await
+    {
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse { error: e.to_string() }),
-        ).into_response(),
+        )
+            .into_response();
     }
+
+    // Insert receipt
+    if let Err(e) = sqlx::query(
+        r#"
+        INSERT INTO console_receipts
+          (command_id, permit_jti, runner_id, status, logs_hash, ret_json, sig_runner, finished_at_ms)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8)
+        "#,
+    )
+    .bind(&req.command_id)
+    .bind(&permit_jti)
+    .bind(&req.runner_id)
+    .bind(&req.status)
+    .bind(&req.logs_hash)
+    .bind(&req.ret)
+    .bind(&req.sig_runner)
+    .bind(now_ms)
+    .execute(&mut *tx)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e.to_string() }),
+        )
+            .into_response();
+    }
+
+    // Commit
+    if let Err(e) = tx.commit().await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e.to_string() }),
+        )
+            .into_response();
+    }
+
+    tracing::info!(
+        command_id = %req.command_id,
+        runner_id = %req.runner_id,
+        status = %req.status,
+        "✅ Execution receipt recorded"
+    );
+
+    (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
 }
 
-// ============ Helpers ============
-
-fn blake3_hex(data: &str) -> String {
-    let hash = blake3::hash(data.as_bytes());
-    hash.to_hex().to_string()
-}
+// =============================================================================
+// HELPERS
+// =============================================================================
 
 fn now_millis() -> u64 {
     std::time::SystemTime::now()
@@ -413,26 +689,12 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-/// Get TTL in milliseconds based on risk level
-fn get_ttl_for_risk(risk: &str) -> u64 {
+fn get_ttl_for_risk(risk: &str) -> i64 {
     match risk {
-        "L0" | "L1" | "L2" => 2 * 60 * 1000,  // 2 min
-        "L3" => 5 * 60 * 1000,                 // 5 min
-        "L4" | "L5" => 3 * 60 * 1000,          // 3 min (shorter for high risk)
-        _ => 2 * 60 * 1000,                    // default
+        "L0" | "L1" => 10 * 60 * 1000,     // 10 min
+        "L2" => 5 * 60 * 1000,              // 5 min
+        "L3" => 3 * 60 * 1000,              // 3 min
+        "L4" | "L5" => 90 * 1000,           // 90 sec (high risk = short lived)
+        _ => 5 * 60 * 1000,                 // default 5 min
     }
 }
-
-/// Get TTL in milliseconds based on job type (legacy, for backward compat)
-fn get_ttl_for_job_type(job_type: &str) -> u64 {
-    // L0-L2: 2 minutes, L3: 5 minutes, L4-L5: 3 minutes
-    // For now, use simple heuristics
-    if job_type.contains("security") || job_type.contains("merge_protected") {
-        3 * 60 * 1000 // L4-L5: 3 min
-    } else if job_type.contains("tag_release") || job_type.contains("register") {
-        5 * 60 * 1000 // L3: 5 min
-    } else {
-        2 * 60 * 1000 // L0-L2: 2 min
-    }
-}
-
