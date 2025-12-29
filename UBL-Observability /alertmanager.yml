@@ -1,0 +1,166 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: ${SLACK_WEBHOOK_URL}
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Alert routing tree
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  
+  routes:
+    # Critical alerts go to PagerDuty
+    - match: 
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true
+    
+    # Critical alerts also go to Slack
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+    
+    # Warning alerts go to Slack only
+    - match:
+        severity:  warning
+      receiver: 'slack-warnings'
+    
+    # Info alerts go to Slack info channel
+    - match:
+        severity: info
+      receiver: 'slack-info'
+    
+    # Database alerts
+    - match:
+        service: postgres
+      receiver: 'slack-database'
+      group_by: ['alertname', 'instance']
+    
+    # SLO violations
+    - match:
+        slo:  availability
+      receiver: 'pagerduty-slo'
+      continue: true
+    
+    - match:
+        slo: availability
+      receiver: 'slack-slo'
+
+# Inhibition rules (prevent alert spam)
+inhibit_rules:
+  # Inhibit warning if critical is firing
+  - source_match: 
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service', 'instance']
+  
+  # If service is down, inhibit other alerts for that service
+  - source_match: 
+      alertname: 'UBLKernelDown'
+    target_match_re:
+      alertname: 'UBLKernel.*'
+    equal: ['instance']
+  
+  - source_match:
+      alertname: 'OfficeDown'
+    target_match_re:
+      alertname: 'Office.*'
+    equal: ['instance']
+
+# Receivers
+receivers:
+  - name:  'default'
+    slack_configs:
+      - channel:  '#alerts-default'
+        title: '{{ template "slack.default.title" . }}'
+        text: '{{ template "slack. default.text" . }}'
+        send_resolved: true
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: ${PAGERDUTY_SERVICE_KEY}
+        description: '{{ template "pagerduty. default.description" . }}'
+        severity: 'critical'
+        details: 
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+          num_firing: '{{ .Alerts.Firing | len }}'
+          num_resolved: '{{ .Alerts.Resolved | len }}'
+
+  - name: 'pagerduty-slo'
+    pagerduty_configs:
+      - service_key: ${PAGERDUTY_SLO_KEY}
+        description: 'SLO Violation: {{ .CommonAnnotations.summary }}'
+        severity: 'error'
+
+  - name: 'slack-critical'
+    slack_configs: 
+      - channel: '#alerts-critical'
+        color: 'danger'
+        title: '🚨 CRITICAL: {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Service:* {{ .Labels.service }}
+          *Description:* {{ .Annotations.description }}
+          *Value:* {{ .Annotations.value }}
+          {{ end }}
+        send_resolved: true
+        actions:
+          - type: button
+            text: 'Runbook 📖'
+            url: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+          - type: button
+            text:  'Grafana 📊'
+            url: 'http://grafana:3000/d/system-overview'
+          - type: button
+            text:  'Silence 🔕'
+            url: '{{ template "slack.default.silence_url" . }}'
+
+  - name: 'slack-warnings'
+    slack_configs: 
+      - channel: '#alerts-warnings'
+        color: 'warning'
+        title: '⚠️ WARNING: {{ .CommonAnnotations.summary }}'
+        text: '{{ template "slack.default.text" . }}'
+        send_resolved: true
+
+  - name: 'slack-info'
+    slack_configs: 
+      - channel: '#alerts-info'
+        color: 'good'
+        title: 'ℹ️ INFO: {{ .CommonAnnotations.summary }}'
+        text: '{{ template "slack.default.text" . }}'
+        send_resolved: true
+
+  - name: 'slack-database'
+    slack_configs: 
+      - channel: '#alerts-database'
+        color: 'danger'
+        title: '🗄️ DATABASE: {{ .CommonAnnotations.summary }}'
+        text: '{{ template "slack. default.text" . }}'
+        send_resolved: true
+
+  - name: 'slack-slo'
+    slack_configs: 
+      - channel: '#alerts-slo'
+        color: 'danger'
+        title: '📉 SLO VIOLATION: {{ .CommonAnnotations. summary }}'
+        text: |
+          *SLO Type:* {{ .CommonLabels.slo }}
+          *Current Value:* {{ .CommonAnnotations.value }}
+          *Threshold:* {{ .CommonAnnotations.threshold }}
+          
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+
+# Templates
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

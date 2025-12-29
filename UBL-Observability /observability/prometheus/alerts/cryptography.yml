@@ -1,0 +1,141 @@
+groups:
+  - name: cryptography_alerts
+    interval: 30s
+    rules: 
+      # CRITICAL - Zero Tolerance
+      - alert: CryptoSignatureDeterminismViolation
+        expr: increase(signature_determinism_violations[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: cryptography
+        annotations: 
+          summary: "Non-deterministic signature detected"
+          description: "Ed25519 signatures are non-deterministic - critical crypto failure!"
+          runbook_url: "https://runbooks.company.com/crypto-determinism-violation"
+      
+      - alert: CryptoHashConsistencyViolation
+        expr: increase(hash_consistency_violations[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: cryptography
+        annotations: 
+          summary: "Hash function inconsistency detected"
+          description: "Hash function producing inconsistent results - critical failure!"
+          runbook_url: "https://runbooks.company.com/hash-consistency-violation"
+      
+      - alert: CryptoKeyCollision
+        expr: increase(key_collision_detected[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: cryptography
+        annotations:
+          summary: "Duplicate cryptographic key detected"
+          description: "RNG failure - duplicate key generated! System compromised!"
+          runbook_url: "https://runbooks.company.com/key-collision"
+      
+      - alert: CryptoHashChainBreak
+        expr: increase(hash_chain_breaks_detected[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: cryptography
+        annotations:
+          summary: "Hash chain integrity broken"
+          description: "Hash chain break detected at sequence {{ $labels.sequence }}"
+          runbook_url: "https://runbooks.company.com/hash-chain-break"
+      
+      - alert: CryptoHashCollision
+        expr: increase(hash_collision_detected[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: cryptography
+        annotations:
+          summary: "Hash collision detected"
+          description: "Impossible hash collision detected - investigate immediately!"
+      
+      # HIGH Severity
+      - alert: CryptoHighSignatureFailureRate
+        expr: rate(signature_verification_failures_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: high
+          component: cryptography
+        annotations:
+          summary: "High signature verification failure rate"
+          description: "{{ $value }}/sec signature verification failures"
+      
+      - alert: CryptoRNGEntropyStarvation
+        expr: increase(rng_entropy_starvation_events[5m]) > 0
+        for: 1m
+        labels:
+          severity: high
+          component: cryptography
+        annotations:
+          summary: "RNG entropy starvation"
+          description: "Random number generator running low on entropy"
+          runbook_url: "https://runbooks.company.com/rng-entropy-starvation"
+      
+      - alert: CryptoRNGStatisticalTestFailure
+        expr: rng_statistical_tests_total{result="fail"} > 0
+        for: 5m
+        labels:
+          severity: high
+          component: cryptography
+        annotations:
+          summary: "RNG statistical test failure"
+          description: "RNG failing {{ $labels.test_name }} test"
+      
+      # WARNING Severity
+      - alert: CryptoKeyRotationOverdue
+        expr: key_rotation_overdue > 0
+        for: 1h
+        labels:
+          severity: warning
+          component: cryptography
+        annotations:
+          summary: "Cryptographic key rotation overdue"
+          description: "{{ $value }} keys past rotation deadline"
+      
+      - alert: CryptoTimingAttackVulnerability
+        expr: increase(timing_attack_vulnerability_detected[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          component: cryptography
+        annotations:
+          summary: "Potential timing attack vulnerability"
+          description: "Timing variance detected in {{ $labels.operation }}"
+      
+      - alert: CryptoWeakAlgorithmUsage
+        expr: increase(weak_algorithm_usage[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: cryptography
+        annotations:
+          summary: "Weak cryptographic algorithm in use"
+          description: "Algorithm {{ $labels.algorithm }} is considered weak"
+      
+      - alert: CryptoDeprecatedAlgorithm
+        expr: increase(deprecated_algorithm_usage[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: cryptography
+        annotations: 
+          summary: "Deprecated algorithm in use"
+          description: "Algorithm {{ $labels.algorithm }} is deprecated"
+      
+      - alert: CryptoUnauthorizedKeyAccess
+        expr: increase(key_storage_unauthorized_access_attempts[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: cryptography
+        annotations:
+          summary: "Unauthorized key storage access"
+          description: "Unauthorized access attempt to key {{ $labels.key_id }}"

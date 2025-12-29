@@ -139,7 +139,7 @@ async fn post_message(
     // 2. Check idempotency
     let tenant_id = "default"; // TODO: Extract from session
     let idempotency_key = req.idempotency_key.clone().unwrap_or_else(|| {
-        idempotency::IdempotencyStore::generate_key(
+        crate::messenger_gateway::idempotency::IdempotencyStore::generate_key(
             tenant_id,
             "post_message",
             &conversation_id,
@@ -239,7 +239,7 @@ async fn post_message(
                 action: format!("{:?}", office_resp.action),
             };
             
-            let record = idempotency::IdempotencyRecord {
+            let record = crate::messenger_gateway::idempotency::IdempotencyRecord {
                 status: "completed".to_string(),
                 response_body: Some(serde_json::to_value(&response).unwrap()),
                 created_event_ids: office_resp.event_ids.clone(),
@@ -271,7 +271,7 @@ async fn job_action(
     // 2. Check idempotency
     let tenant_id = "default"; // TODO: Extract from session
     let idempotency_key = req.idempotency_key.clone().unwrap_or_else(|| {
-        idempotency::IdempotencyStore::generate_key(
+        crate::messenger_gateway::idempotency::IdempotencyStore::generate_key(
             tenant_id,
             "job_action",
             &job_id,
@@ -303,7 +303,7 @@ async fn job_action(
             info!("✅ Office processed job action: success={}", office_resp.success);
             
             // Store idempotency record
-            let record = idempotency::IdempotencyRecord {
+            let record = crate::messenger_gateway::idempotency::IdempotencyRecord {
                 status: "completed".to_string(),
                 response_body: Some(serde_json::to_value(JobActionResponse {
                     success: office_resp.success,

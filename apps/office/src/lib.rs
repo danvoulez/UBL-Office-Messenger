@@ -66,6 +66,7 @@ pub mod api;
 pub mod job_executor;
 pub mod audit;
 pub mod middleware;
+pub mod observability;
 
 // Re-exports for convenience
 pub use entity::{Entity, EntityId, Instance, Guardian};

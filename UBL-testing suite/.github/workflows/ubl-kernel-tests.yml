@@ -1,0 +1,234 @@
+name: UBL Kernel Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'ubl/kernel/rust/**'
+      - 'ubl/sql/**'
+  pull_request:
+    branches:  [main, develop]
+    paths:
+      - 'ubl/kernel/rust/**'
+      - 'ubl/sql/**'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  DATABASE_URL: postgres://ubl_test:test_password@localhost: 5432/ubl_test
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER:  ubl_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ubl_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with: 
+          components: rustfmt, clippy
+      
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/. cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache Cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner. os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with: 
+          path: ubl/kernel/rust/target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+      
+      - name: Run database migrations
+        working-directory: ubl/kernel/rust/ubl-server
+        run: |
+          sqlx database create
+          sqlx migrate run
+      
+      - name:  Check formatting
+        working-directory: ubl/kernel/rust
+        run: cargo fmt --all -- --check
+      
+      - name: Run Clippy
+        working-directory: ubl/kernel/rust
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      
+      - name: Build all crates
+        working-directory:  ubl/kernel/rust
+        run: cargo build --workspace --all-features
+      
+      - name: Run unit tests
+        working-directory: ubl/kernel/rust
+        run: cargo test --workspace --lib --all-features
+      
+      - name: Run integration tests
+        working-directory: ubl/kernel/rust
+        run: cargo test --workspace --test '*' --all-features -- --test-threads=1
+      
+      - name: Run doc tests
+        working-directory: ubl/kernel/rust
+        run: cargo test --workspace --doc --all-features
+  
+  coverage:
+    name:  Code Coverage
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ubl_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ubl_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+      
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+      
+      - name: Run migrations
+        working-directory: ubl/kernel/rust/ubl-server
+        run: |
+          sqlx database create
+          sqlx migrate run
+      
+      - name: Generate coverage
+        working-directory: ubl/kernel/rust
+        run: |
+          cargo tarpaulin --workspace --all-features \
+            --out Xml --out Html \
+            --timeout 300 \
+            --exclude-files '*/tests/*' \
+            -- --test-threads=1
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ubl/kernel/rust/cobertura.xml
+          flags: ubl-kernel
+          name: ubl-kernel-coverage
+      
+      - name: Check coverage thresholds
+        run: |
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' ubl/kernel/rust/cobertura.xml | head -1)
+          COVERAGE_PCT=$(echo "$COVERAGE * 100" | bc)
+          echo "Coverage: ${COVERAGE_PCT}%"
+          if (( $(echo "$COVERAGE_PCT < 90" | bc -l) )); then
+            echo "Coverage ${COVERAGE_PCT}% is below 90% threshold"
+            exit 1
+          fi
+      
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ubl/kernel/rust/tarpaulin-report.html
+  
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name:  Install Rust toolchain
+        uses:  dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Run security audit
+        working-directory: ubl/kernel/rust
+        run: cargo audit
+  
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ubl_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ubl_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+      
+      - name: Run migrations
+        working-directory: ubl/kernel/rust/ubl-server
+        run: |
+          sqlx database create
+          sqlx migrate run
+      
+      - name: Run benchmarks
+        working-directory: ubl/kernel/rust
+        run: cargo bench --workspace -- --output-format bencher | tee bench_output.txt
+      
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: ubl/kernel/rust/bench_output.txt
+          github-token: ${{ secrets. GITHUB_TOKEN }}
+          auto-push: true

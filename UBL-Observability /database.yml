@@ -1,0 +1,69 @@
+groups:
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # Database Down
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels: 
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL is down"
+          description:  "Database has been unreachable for more than 1 minute"
+
+      # High Connection Count
+      - alert: DatabaseHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "High database connection count"
+          description: "Connection usage is {{ $value | humanizePercentage }}"
+
+      # Replication Lag
+      - alert:  DatabaseReplicationLag
+        expr: pg_replication_lag_seconds > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary:  "Database replication lag"
+          description:  "Replication lag is {{ $value }}s"
+
+      # Disk Space
+      - alert: DatabaseLowDiskSpace
+        expr:  (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "Low disk space for database"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+
+      # Slow Queries
+      - alert: DatabaseSlowQueries
+        expr: rate(pg_stat_statements_mean_exec_time[5m]) > 1000
+        for: 10m
+        labels:
+          severity: info
+          service: postgres
+        annotations:
+          summary: "Slow queries detected"
+          description: "Average query time:  {{ $value }}ms"
+
+      # Dead Tuples
+      - alert: DatabaseHighDeadTuples
+        expr: pg_stat_user_tables_n_dead_tup / (pg_stat_user_tables_n_live_tup + pg_stat_user_tables_n_dead_tup) > 0.2
+        for: 30m
+        labels:
+          severity: info
+          service: postgres
+        annotations:
+          summary: "High percentage of dead tuples"
+          description: "Table {{ $labels.relname }} has {{ $value | humanizePercentage }} dead tuples"

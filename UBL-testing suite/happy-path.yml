@@ -1,0 +1,100 @@
+name: "Golden Run - Happy Path"
+description: "Basic message → job → completion flow"
+
+steps:
+  - name: "System Health Check"
+    type: health_check
+    services:
+      - ubl-kernel
+      - office
+      - postgres
+    
+  - name: "User Bootstrap"
+    type: api_call
+    endpoint: GET /messenger/bootstrap? tenant_id=T. UBL
+    expected_status: 200
+    validate: 
+      - entities. length >= 0
+      - conversations.length >= 0
+    
+  - name: "Send Message"
+    type: api_call
+    endpoint: POST /v1/conversations/{conversation_id}/messages
+    payload:
+      content: "Create a proposal for Q1 planning"
+      idempotency_key: "golden_run_msg_001"
+    expected_status: 200
+    timeout: 5s
+    validate: 
+      - message_id != null
+      - hash != null
+    performance:
+      p95: 500ms
+      p99: 1000ms
+    
+  - name: "Wait for Job Creation"
+    type: wait
+    duration: 5s
+    
+  - name: "Verify Job Card in Timeline"
+    type: api_call
+    endpoint: GET /v1/conversations/{conversation_id}/timeline
+    expected_status: 200
+    validate:
+      - items.some(i => i.item_type == "job_card")
+    
+  - name: "Extract Job Details"
+    type: extract
+    from: timeline. items
+    filter:  item_type == "job_card"
+    store:
+      - job_id
+      - card_id
+    
+  - name: "Approve Job"
+    type: api_call
+    endpoint: POST /v1/jobs/{job_id}/actions
+    payload:
+      action_type: "job. approve"
+      card_id: "{card_id}"
+      button_id: "approve_btn"
+      idempotency_key: "golden_run_approve_001"
+    expected_status: 200
+    timeout: 2s
+    validate:
+      - success == true
+    
+  - name: "Wait for Job Execution"
+    type: wait
+    duration: 10s
+    
+  - name:  "Verify Job Progress"
+    type: api_call
+    endpoint: GET /v1/jobs/{job_id}
+    expected_status: 200
+    validate:
+      - state in ["approved", "in_progress", "completed"]
+      - timeline.length > 0
+    performance:
+      p95: 100ms
+    
+  - name: "Verify SSE Updates"
+    type: sse_subscribe
+    endpoint: GET /v1/stream? tenant_id=T.UBL
+    duration: 5s
+    expected_events:
+      - timeline.append
+      - job. update
+    
+  - name: "Final State Validation"
+    type: snapshot
+    capture: 
+      - database_state
+      - ledger_sequence
+      - projection_consistency
+
+success_criteria:
+  - all_steps_passed: true
+  - total_duration: <30s
+  - error_rate: 0%
+  - performance_slos_met: true

@@ -1,0 +1,77 @@
+name: "Service Crash Experiment"
+description: "Simulate unexpected service termination"
+
+hypothesis: |
+  When a service crashes unexpectedly: 
+  1. In-flight requests fail gracefully
+  2. Service restarts automatically
+  3. State is recovered from ledger
+  4. No data loss occurs
+
+steady_state:
+  - service: ubl-kernel
+    metric: health_check
+    expected: healthy
+  - service: office
+    metric: health_check
+    expected: healthy
+  - metric: end_to_end_success_rate
+    expected: >99%
+
+experiment:
+  - name: "Start Background Load"
+    type: load_test
+    duration: 300s
+    operations:
+      - type: message_send
+        rate: 5/s
+      - type: job_creation
+        rate: 2/s
+    background: true
+    
+  - name: "Kill UBL Kernel (SIGKILL)"
+    type: service
+    action: kill
+    signal: SIGKILL
+    target: ubl-kernel
+    
+  - name: "Observe Failure Detection"
+    type: observe
+    duration: 10s
+    metrics:
+      - office_connection_errors
+      - office_retry_attempts
+    
+  - name: "Auto-Restart UBL Kernel"
+    type: service
+    action: restart
+    target:  ubl-kernel
+    
+  - name: "Verify State Recovery"
+    type: validate
+    checks:
+      - service:  ubl-kernel
+        metric:  health_check
+        expected: healthy
+        timeout: 60s
+      - metric: ledger_sequence
+        expected: continuous
+      - metric: no_missing_events
+        expected: true
+    
+  - name: "Continue Load Test"
+    type: wait
+    duration: 120s
+    
+  - name:  "Final Validation"
+    type: validate
+    checks:
+      - metric: end_to_end_success_rate
+        expected: >95%
+        window: last_60s
+
+success_criteria:
+  - restart_time: <30s
+  - no_data_loss: true
+  - ledger_integrity: 100%
+  - recovery_success_rate: >95%

@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ubl_diamond
+      POSTGRES_PASSWORD: diamond_password
+      POSTGRES_DB: ubl_diamond
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Production-like settings
+    command: 
+      - "postgres"
+      - "-c"
+      - "max_connections=500"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  ubl-kernel:
+    build: 
+      context: ../../ubl/kernel/rust
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://ubl_diamond:diamond_password@postgres:5432/ubl_diamond
+      PORT: 8080
+      RUST_LOG: info
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  office:  
+    build: 
+      context: ../../apps/office
+      dockerfile: Dockerfile
+    environment:
+      OFFICE__LLM__API_KEY: ${ANTHROPIC_API_KEY}
+      OFFICE__UBL__ENDPOINT: http://ubl-kernel:8080
+      OFFICE__SERVER__PORT: 8081
+      RUST_LOG: info
+    ports:  
+      - "8081:8081"
+    depends_on:  
+      - ubl-kernel
+    deploy:
+      resources: 
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  messenger:  
+    build:
+      context: ../../apps/messenger/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+      VITE_OFFICE_URL: http://localhost:8081
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ubl-kernel
+      - office
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: diamond
+    ports:
+      - "3001:3000"
+
+volumes: 
+  postgres_data:

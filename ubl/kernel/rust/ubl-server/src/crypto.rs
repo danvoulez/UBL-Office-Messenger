@@ -138,7 +138,7 @@ pub fn permit_binding_hash(
 /// Compute the canonical hash of a plan JSON
 pub fn canonical_plan_hash(plan_json: &serde_json::Value) -> String {
     // Use ubl_atom canonicalization if available
-    let bytes = match crate::ubl_atom_compat::canonicalize(plan_json) {
+    let bytes = match crate::crypto::ubl_atom_compat::canonicalize(plan_json) {
         Ok(b) => b,
         Err(_) => serde_json::to_vec(plan_json).unwrap_or_default(),
     };

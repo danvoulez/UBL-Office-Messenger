@@ -1,0 +1,138 @@
+{
+  "dashboard": {
+    "title": "🏛️ UBL Kernel",
+    "tags": ["ubl-kernel"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Ledger Append Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(ledger_append_total{job=\"ubl-kernel\"}[5m])",
+            "legendFormat": "Appends/sec"
+          }
+        ],
+        "gridPos": {"h":  8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id":  2,
+        "title":  "Ledger Append Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ledger_append_duration_seconds_bucket{job=\"ubl-kernel\"}[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr":  "histogram_quantile(0.95, rate(ledger_append_duration_seconds_bucket{job=\"ubl-kernel\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr":  "histogram_quantile(0.99, rate(ledger_append_duration_seconds_bucket{job=\"ubl-kernel\"}[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [{"format": "s"}],
+        "gridPos": {"h": 8, "w":  12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Container Events by Type",
+        "type": "graph",
+        "targets": [
+          {
+            "expr":  "rate(ledger_events_total{job=\"ubl-kernel\"}[5m]) by (container_id)",
+            "legendFormat": "{{container_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x":  0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Projection Lag",
+        "type":  "graph",
+        "targets":  [
+          {
+            "expr": "ledger_sequence{job=\"ubl-kernel\"} - projection_sequence{job=\"ubl-kernel\"}",
+            "legendFormat":  "{{projection}}"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [100], "type": "gt"},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ],
+          "name": "High Projection Lag"
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "SSE Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sse_active_connections{job=\"ubl-kernel\"}",
+            "legendFormat": "Active"
+          },
+          {
+            "expr":  "rate(sse_connections_total{job=\"ubl-kernel\"}[5m])",
+            "legendFormat": "New/sec"
+          },
+          {
+            "expr":  "rate(sse_connections_dropped_total{job=\"ubl-kernel\"}[5m])",
+            "legendFormat": "Dropped/sec"
+          }
+        ],
+        "gridPos":  {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Database Connection Pool",
+        "type": "graph",
+        "targets": [
+          {
+            "expr":  "db_connection_pool_active{job=\"ubl-kernel\"}",
+            "legendFormat": "Active"
+          },
+          {
+            "expr": "db_connection_pool_idle{job=\"ubl-kernel\"}",
+            "legendFormat": "Idle"
+          },
+          {
+            "expr": "db_connection_pool_max{job=\"ubl-kernel\"}",
+            "legendFormat": "Max"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Policy Violations",
+        "type":  "graph",
+        "targets":  [
+          {
+            "expr": "rate(policy_violations_total{job=\"ubl-kernel\"}[5m]) by (policy_type)",
+            "legendFormat": "{{policy_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "WebAuthn Operations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(webauthn_operations_total{job=\"ubl-kernel\"}[5m]) by (operation)",
+            "legendFormat":  "{{operation}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x":  12, "y": 24}
+      }
+    ]
+  }
+}

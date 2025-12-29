@@ -1,0 +1,122 @@
+name: "Cascading Failure Experiment"
+description: "Multiple simultaneous failures"
+
+hypothesis: |
+  When multiple failures occur simultaneously:
+  1. System implements circuit breakers
+  2. Failures don't cascade to all services
+  3. Some functionality remains available
+  4. System recovers in stages
+
+steady_state:
+  - all_services:  healthy
+  - metric: overall_availability
+    expected: >99%
+
+experiment:
+  - name: "Start High Load"
+    type: load_test
+    duration: 600s
+    operations:
+      - type: message_send
+        rate:  50/s
+      - type: job_operations
+        rate: 20/s
+    background: true
+    
+  - name: "Inject Network Latency"
+    type: network
+    action: add_latency
+    latency: 1000ms
+    targets:  [ubl-kernel, office]
+    
+  - name: "Wait 30s"
+    type: wait
+    duration: 30s
+    
+  - name: "Apply CPU Pressure to UBL"
+    type:  resource
+    action: stress_cpu
+    target: ubl-kernel
+    cores: 2
+    
+  - name: "Wait 20s"
+    type: wait
+    duration: 20s
+    
+  - name: "Partition Office from UBL"
+    type:  network
+    action: partition
+    targets: [office, ubl-kernel]
+    
+  - name: "Wait 30s"
+    type: wait
+    duration: 30s
+    
+  - name: "Apply Memory Pressure to Office"
+    type: resource
+    action: stress_memory
+    target: office
+    size: 700MB
+    
+  - name:  "Observe Chaos"
+    type: observe
+    duration: 60s
+    metrics:
+      - overall_error_rate
+      - circuit_breaker_state
+      - degraded_functionality_list
+      - blast_radius
+    
+  - name: "Start Recovery - Remove Network Latency"
+    type:  network
+    action: remove_latency
+    
+  - name: "Wait 20s"
+    type: wait
+    duration: 20s
+    
+  - name: "Heal Network Partition"
+    type: network
+    action: heal
+    
+  - name: "Wait 20s"
+    type: wait
+    duration: 20s
+    
+  - name: "Release CPU Pressure"
+    type:  resource
+    action: release_cpu
+    
+  - name: "Wait 20s"
+    type: wait
+    duration: 20s
+    
+  - name: "Release Memory Pressure"
+    type:  resource
+    action: release_memory
+    
+  - name: "Monitor Recovery"
+    type: observe
+    duration: 120s
+    metrics:
+      - recovery_progression
+      - service_health_timeline
+      - error_rate_decline
+    
+  - name: "Final Validation"
+    type: validate
+    checks:
+      - all_services: healthy
+      - metric: overall_availability
+        expected:  >95%
+        after: 180s
+      - no_data_loss: true
+
+success_criteria:
+  - partial_availability_maintained: >50%
+  - circuit_breakers_triggered: true
+  - no_complete_outage: true
+  - recovery_time: <10m
+  - data_integrity:  100%
+  - max_blast_radius: <80%

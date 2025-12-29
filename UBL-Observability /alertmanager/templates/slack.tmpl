@@ -1,0 +1,34 @@
+{{ define "slack.default.title" }}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs. Values | join " " }}
+{{ end }}
+
+{{ define "slack.default.text" }}
+{{ range .Alerts }}
+*Alert:* {{ .Labels.alertname }} - {{ . Annotations.summary }}
+*Severity:* {{ .Labels.severity }}
+*Description:* {{ .Annotations.description }}
+{{ if .Labels.service }}*Service:* {{ .Labels.service }}{{ end }}
+{{ if .Labels.instance }}*Instance:* {{ .Labels.instance }}{{ end }}
+{{ if .Annotations.value }}*Value:* {{ .Annotations. value }}{{ end }}
+*Started:* {{ .StartsAt. Format "2006-01-02 15:04:05 MST" }}
+{{ if .EndsAt }}*Ended:* {{ .EndsAt. Format "2006-01-02 15:04:05 MST" }}{{ end }}
+{{ end }}
+{{ end }}
+
+{{ define "slack.default.silence_url" }}
+{{ . ExternalURL }}/#/silences/new?filter=%7B
+{{- range .CommonLabels. SortedPairs -}}
+  {{- if ne . Name "alertname" -}}
+    {{- . Name }}%3D"{{- . Value -}}"%2C
+  {{- end -}}
+{{- end -}}
+alertname%3D"{{ .CommonLabels.alertname }}"%7D
+{{ end }}
+
+{{ define "pagerduty.default.description" }}
+{{ .CommonLabels.alertname }}: {{ .CommonAnnotations.summary }}
+{{ end }}
+
+{{ define "pagerduty.default. instances" }}
+{{ range .  }}{{ . Labels.instance }}{{ end }}
+{{ end }}

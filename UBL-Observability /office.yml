@@ -1,0 +1,69 @@
+groups:
+  - name: office_alerts
+    interval: 30s
+    rules: 
+      # Service Down
+      - alert: OfficeDown
+        expr: up{job="office"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: office
+        annotations: 
+          summary: "Office Runtime is down"
+          description: "Office has been down for more than 1 minute"
+
+      # Job Execution Failures
+      - alert: OfficeJobExecutionFailures
+        expr: rate(job_execution_failures_total{job="office"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity:  warning
+          service: office
+        annotations:
+          summary: "High job execution failure rate"
+          description: "Job failure rate:  {{ $value }}/sec"
+
+      # LLM API Errors
+      - alert: OfficeLLMAPIErrors
+        expr: rate(llm_api_errors_total{job="office"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: office
+        annotations:
+          summary: "LLM API errors detected"
+          description: "LLM API error rate: {{ $value }}/sec"
+
+      # Token Budget Exhaustion
+      - alert:  OfficeTokenBudgetExhausted
+        expr: entity_token_budget_remaining{job="office"} < 1000
+        for: 5m
+        labels:
+          severity: info
+          service: office
+        annotations:
+          summary: "Entity token budget low"
+          description: "Entity {{ $labels.entity_id }} has only {{ $value }} tokens remaining"
+
+      # Long-Running Jobs
+      - alert: OfficeLongRunningJob
+        expr: job_execution_duration_seconds{job="office"} > 600
+        for: 0m
+        labels:
+          severity:  info
+          service: office
+        annotations:
+          summary: "Long-running job detected"
+          description:  "Job {{ $labels.job_id }} running for {{ $value }}s"
+
+      # Circuit Breaker Open
+      - alert: OfficeCircuitBreakerOpen
+        expr: circuit_breaker_state{job="office",state="open"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          service: office
+        annotations:
+          summary: "Circuit breaker open"
+          description: "Circuit breaker for {{ $labels.dependency }} is open"

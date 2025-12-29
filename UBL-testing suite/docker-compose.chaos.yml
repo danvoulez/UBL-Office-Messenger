@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ubl_chaos
+      POSTGRES_PASSWORD: chaos_password
+      POSTGRES_DB: ubl_chaos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chaos-net
+    labels:
+      chaos.target: "true"
+
+  ubl-kernel:
+    build: 
+      context: ../../ubl/kernel/rust
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://ubl_chaos:chaos_password@postgres:5432/ubl_chaos
+      PORT: 8080
+      RUST_LOG: debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - chaos-net
+    labels:
+      chaos.target: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+
+  office: 
+    build:
+      context:  ../../apps/office
+      dockerfile: Dockerfile
+    environment:
+      OFFICE__LLM__API_KEY: ${ANTHROPIC_API_KEY}
+      OFFICE__UBL__ENDPOINT: http://ubl-kernel:8080
+      OFFICE__SERVER__PORT: 8081
+      RUST_LOG: debug
+    ports: 
+      - "8081:8081"
+    depends_on: 
+      - ubl-kernel
+    networks:
+      - chaos-net
+    labels:
+      chaos.target: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+
+  # Chaos Engineering Tools
+  pumba:
+    image: gaiaadm/pumba:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --log-level info --interval 30s
+    networks:
+      - chaos-net
+
+  toxiproxy:
+    image:  ghcr.io/shopify/toxiproxy:latest
+    ports:
+      - "8474:8474"
+      - "8666:8666"
+    networks: 
+      - chaos-net
+
+  # Monitoring
+  prometheus:
+    image:  prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus-chaos. yml:/etc/prometheus/prometheus. yml
+    ports:
+      - "9090:9090"
+    networks:
+      - chaos-net
+
+  grafana:
+    image: grafana/grafana: latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: chaos
+    ports:
+      - "3001:3000"
+    networks: 
+      - chaos-net
+
+networks:
+  chaos-net: 
+    driver: bridge
+
+volumes:
+  postgres_data: 

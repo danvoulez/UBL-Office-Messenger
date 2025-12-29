@@ -1,0 +1,95 @@
+[config]
+default_to_workspace = false
+
+[env]
+RUST_BACKTRACE = "1"
+RUST_LOG = "debug"
+
+[tasks.test]
+description = "Run all tests"
+command = "cargo"
+args = ["test", "--all-features", "--", "--nocapture"]
+
+[tasks.test-unit]
+description = "Run unit tests only"
+command = "cargo"
+args = ["test", "--lib", "--all-features"]
+
+[tasks.test-integration]
+description = "Run integration tests only"
+command = "cargo"
+args = ["test", "--test", "*", "--all-features"]
+
+[tasks.test-coverage]
+description = "Run tests with coverage"
+command = "cargo"
+args = [
+    "tarpaulin",
+    "--all-features",
+    "--out", "Xml",
+    "--out", "Html",
+    "--timeout", "300",
+    "--exclude-files", "*/tests/*"
+]
+
+[tasks.test-watch]
+description = "Run tests in watch mode"
+command = "cargo"
+args = ["watch", "-x", "test --all-features"]
+
+[tasks. lint]
+description = "Run clippy linter"
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+
+[tasks.fmt]
+description = "Format code"
+command = "cargo"
+args = ["fmt", "--all"]
+
+[tasks.fmt-check]
+description = "Check code formatting"
+command = "cargo"
+args = ["fmt", "--all", "--", "--check"]
+
+[tasks.audit]
+description = "Run security audit"
+command = "cargo"
+args = ["audit"]
+
+[tasks.clean]
+description = "Clean build artifacts"
+command = "cargo"
+args = ["clean"]
+
+[tasks.build]
+description = "Build all targets"
+command = "cargo"
+args = ["build", "--all-features"]
+
+[tasks.build-release]
+description = "Build release"
+command = "cargo"
+args = ["build", "--release", "--all-features"]
+
+[tasks. doc]
+description = "Generate documentation"
+command = "cargo"
+args = ["doc", "--all-features", "--no-deps", "--open"]
+
+[tasks.check-all]
+description = "Run all checks (fmt, clippy, test, coverage)"
+dependencies = [
+    "fmt-check",
+    "lint",
+    "test",
+    "test-coverage"
+]
+
+[tasks.ci]
+description = "Run CI checks locally"
+dependencies = [
+    "fmt-check",
+    "lint",
+    "test",
+]

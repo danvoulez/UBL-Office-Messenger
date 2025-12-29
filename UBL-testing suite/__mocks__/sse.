@@ -1,0 +1,49 @@
+import { vi } from 'vitest';
+import { EventEmitter } from 'events';
+
+export class SSEClient extends EventEmitter {
+  private connected = false;
+  private cursor = '0:0';
+
+  constructor(
+    private baseUrl: string,
+    private tenantId: string
+  ) {
+    super();
+  }
+
+  connect(cursor?:  string) {
+    this.connected = true;
+    this.cursor = cursor || '0:0';
+    
+    // Simulate hello event
+    setTimeout(() => {
+      this.emit('hello', {
+        type: 'hello',
+        data: { cursor: this.cursor },
+      });
+    }, 10);
+  }
+
+  disconnect() {
+    this.connected = false;
+    this.removeAllListeners();
+  }
+
+  isConnected() {
+    return this.connected;
+  }
+
+  getCursor() {
+    return this.cursor;
+  }
+
+  // Test helper:  simulate SSE event
+  simulateEvent(eventType: string, data:  any) {
+    this.emit(eventType, { type: eventType, data });
+  }
+}
+
+export const mockSSEClient = new SSEClient('http://localhost:8080', 'test');
+
+export default SSEClient;

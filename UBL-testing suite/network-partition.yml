@@ -1,0 +1,63 @@
+name: "Network Partition Experiment"
+description: "Simulate network partition between services"
+
+hypothesis:  |
+  When network partition occurs between UBL and Office,
+  the system should gracefully degrade and recover automatically
+  when partition is healed.
+
+steady_state: 
+  - service:  ubl-kernel
+    metric: health_check
+    expected:  healthy
+  - service: office
+    metric: health_check
+    expected: healthy
+  - metric: message_success_rate
+    expected: >95%
+
+experiment:
+  - name: "Partition UBL from Office"
+    type: network
+    action: partition
+    targets:
+      - ubl-kernel
+      - office
+    duration:  60s
+    
+  - name: "Monitor During Partition"
+    type: observe
+    duration: 60s
+    metrics:
+      - office_retry_count
+      - office_error_rate
+      - ubl_queue_depth
+    
+  - name: "Heal Partition"
+    type: network
+    action: heal
+    
+  - name: "Verify Recovery"
+    type: validate
+    checks:
+      - service: ubl-kernel
+        metric: health_check
+        expected:  healthy
+        timeout: 30s
+      - service: office
+        metric: health_check
+        expected: healthy
+        timeout: 30s
+      - metric: message_success_rate
+        expected: >95%
+        after: 120s
+
+success_criteria:
+  - no_data_loss: true
+  - recovery_time:  <5m
+  - error_rate_during:  <20%
+  - error_rate_after: <1%
+
+rollback: 
+  - action: heal_all_partitions
+  - action: restart_services_if_needed

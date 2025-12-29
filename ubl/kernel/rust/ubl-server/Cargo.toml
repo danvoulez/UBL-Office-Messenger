@@ -22,6 +22,9 @@ tower = "0.5"
 tower-http = { workspace = true }
 futures-util = "0.3"
 
+# HTTP client (for Office client)
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -40,6 +43,14 @@ anyhow = { workspace = true }
 # Logging
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# OpenTelemetry - Distributed tracing
+# Note: opentelemetry-otlp 0.14 requires opentelemetry_sdk 0.20
+opentelemetry = "0.20"
+opentelemetry-otlp = "0.14"
+opentelemetry_sdk = { version = "0.20", features = ["rt-tokio"] }
+opentelemetry-semantic-conventions = "0.12"
+tracing-opentelemetry = "0.20"
 
 # Database
 sqlx = { workspace = true }
@@ -72,3 +83,4 @@ base64ct = { version = "1", features = ["alloc"] }
 ubl-kernel = { path = "../ubl-kernel" }
 ubl-atom = { path = "../ubl-atom" }
 ubl-policy-vm = { path = "../ubl-policy-vm" }
+

@@ -750,7 +750,7 @@ async fn ingest_message(
 
     // 1. Build conversation context from UBL
     // TODO: Query UBL projections for conversation state
-    let conversation_context = crate::job_executor::conversation_context::ConversationContextBuilder::new(
+    let conversation_context = crate::job_executor::ConversationContextBuilder::new(
         req.conversation_id.clone()
     )
     .with_participants(vec![req.from.clone()])

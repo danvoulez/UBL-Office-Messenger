@@ -1,0 +1,73 @@
+name: "High Latency Experiment"
+description: "Simulate slow network conditions"
+
+hypothesis: |
+  Under high latency conditions:
+  1. System remains functional
+  2. Timeouts are handled gracefully
+  3. User experience degrades gracefully
+  4. No cascading failures occur
+
+steady_state:
+  - metric: p95_latency
+    expected:  <500ms
+  - metric: timeout_rate
+    expected: <1%
+
+experiment:
+  - name: "Inject 500ms Latency"
+    type: network
+    action: add_latency
+    latency:  500ms
+    jitter: 100ms
+    targets:
+      - ubl-kernel
+      - office
+    
+  - name: "Run Operations"
+    type: load_test
+    duration: 120s
+    operations:
+      - type: message_send
+        rate: 10/s
+      - type: job_approval
+        rate: 5/s
+    
+  - name: "Monitor Performance"
+    type: observe
+    metrics:
+      - p95_latency
+      - p99_latency
+      - timeout_count
+      - error_rate
+    
+  - name: "Increase Latency to 2s"
+    type: network
+    action: update_latency
+    latency:  2000ms
+    jitter: 500ms
+    
+  - name: "Continue Operations"
+    type: load_test
+    duration: 60s
+    operations:
+      - type: message_send
+        rate: 5/s
+    
+  - name: "Remove Latency"
+    type:  network
+    action: remove_latency
+    
+  - name: "Verify Recovery"
+    type: validate
+    checks:
+      - metric: p95_latency
+        expected:  <500ms
+        after: 30s
+
+success_criteria:
+  - no_crashes: true
+  - graceful_timeout_handling: true
+  - error_rate_under_500ms: <5%
+  - error_rate_under_2s: <30%
+  - recovery_to_baseline: <30s

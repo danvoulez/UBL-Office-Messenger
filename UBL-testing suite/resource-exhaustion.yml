@@ -1,0 +1,85 @@
+name: "Resource Exhaustion Experiment"
+description: "Simulate CPU and memory pressure"
+
+hypothesis: |
+  Under resource pressure:
+  1. Services continue operating with degraded performance
+  2. OOM killer doesn't terminate critical processes
+  3. System recovers when resources are freed
+  4. Rate limiting kicks in to protect system
+
+steady_state:
+  - metric: cpu_usage
+    expected:  <70%
+  - metric: memory_usage
+    expected: <80%
+  - metric: success_rate
+    expected: >99%
+
+experiment:
+  - name: "Start Baseline Load"
+    type: load_test
+    duration: 600s
+    operations:
+      - type: message_send
+        rate: 20/s
+      - type: job_creation
+        rate: 10/s
+    background: true
+    
+  - name: "Apply CPU Pressure"
+    type: resource
+    action: stress_cpu
+    target: ubl-kernel
+    cores: 2
+    duration: 120s
+    
+  - name:  "Monitor CPU Pressure"
+    type: observe
+    duration: 120s
+    metrics:
+      - cpu_usage
+      - request_queue_depth
+      - response_time_p95
+    
+  - name:  "Release CPU Pressure"
+    type: resource
+    action: release_cpu
+    
+  - name: "Apply Memory Pressure"
+    type:  resource
+    action: stress_memory
+    target: office
+    size: 800MB
+    duration: 120s
+    
+  - name: "Monitor Memory Pressure"
+    type: observe
+    duration: 120s
+    metrics:
+      - memory_usage
+      - gc_pause_time
+      - oom_events
+    
+  - name: "Release Memory Pressure"
+    type:  resource
+    action: release_memory
+    
+  - name: "Verify Recovery"
+    type:  validate
+    checks:
+      - metric: cpu_usage
+        expected: <70%
+        after:  60s
+      - metric:  memory_usage
+        expected: <80%
+        after: 60s
+      - metric: success_rate
+        expected: >95%
+        after: 60s
+
+success_criteria:
+  - no_oom_kills: true
+  - rate_limiting_active: true
+  - recovery_time: <2m
+  - data_integrity: 100%

@@ -1,0 +1,122 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Job Approval Flow', () => {
+  test('user can approve a job', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="chat-page"]', { timeout: 10000 });
+    
+    // Login if needed
+    const loginButton = page. locator('[data-testid="login-demo"]');
+    if (await loginButton.isVisible()) {
+      await loginButton.click();
+      await page.waitForSelector('[data-testid="chat-page"]');
+    }
+    
+    // Select conversation
+    const firstConversation = page.locator('[data-testid^="conversation-"]').first();
+    await firstConversation.click();
+    
+    // Send message that triggers job
+    const messageInput = page.locator('[data-testid="message-input"]');
+    await messageInput.fill('Please create a proposal for the new project');
+    await page.locator('[data-testid="send-button"]').click();
+    
+    // Wait for job card
+    const jobCard = page.locator('[data-testid^="job-card-"]');
+    await expect(jobCard).toBeVisible({ timeout: 15000 });
+    
+    // Check for approve button
+    const approveButton = jobCard.locator('[data-testid="job-approve-btn"]');
+    if (await approveButton.isVisible()) {
+      await approveButton.click();
+      
+      // Wait for job state to update
+      await page.waitForTimeout(2000);
+      
+      // Job card should update or disappear
+      const jobState = await jobCard.getAttribute('data-state');
+      console.log('Job state after approval:', jobState);
+      
+      expect(jobState).not.toBe('proposed');
+    }
+    
+    console.log('✅ Job approval flow complete');
+  });
+  
+  test('user can reject a job', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="chat-page"]', { timeout: 10000 });
+    
+    // Login if needed
+    const loginButton = page.locator('[data-testid="login-demo"]');
+    if (await loginButton. isVisible()) {
+      await loginButton.click();
+      await page.waitForSelector('[data-testid="chat-page"]');
+    }
+    
+    // Select conversation
+    const firstConversation = page.locator('[data-testid^="conversation-"]').first();
+    await firstConversation.click();
+    
+    // Send message
+    const messageInput = page.locator('[data-testid="message-input"]');
+    await messageInput.fill('Create a test document');
+    await page.locator('[data-testid="send-button"]').click();
+    
+    // Wait for job card
+    const jobCard = page.locator('[data-testid^="job-card-"]');
+    await expect(jobCard).toBeVisible({ timeout: 15000 });
+    
+    // Check for reject button
+    const rejectButton = jobCard.locator('[data-testid="job-reject-btn"]');
+    if (await rejectButton.isVisible()) {
+      await rejectButton.click();
+      
+      // Wait for rejection
+      await page.waitForTimeout(2000);
+      
+      const jobState = await jobCard.getAttribute('data-state');
+      console.log('Job state after rejection:', jobState);
+      
+      expect(jobState).toBe('rejected');
+    }
+    
+    console.log('✅ Job rejection flow complete');
+  });
+  
+  test('user can view job details', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="chat-page"]', { timeout: 10000 });
+    
+    // Login if needed
+    const loginButton = page.locator('[data-testid="login-demo"]');
+    if (await loginButton.isVisible()) {
+      await loginButton.click();
+      await page.waitForSelector('[data-testid="chat-page"]');
+    }
+    
+    // Select conversation
+    const firstConversation = page.locator('[data-testid^="conversation-"]').first();
+    await firstConversation.click();
+    
+    // Find existing job card
+    const jobCard = page.locator('[data-testid^="job-card-"]').first();
+    if (await jobCard.isVisible({ timeout: 5000 })) {
+      // Click to view details
+      const viewDetailsBtn = jobCard.locator('[data-testid="view-details-btn"]');
+      if (await viewDetailsBtn.isVisible()) {
+        await viewDetailsBtn.click();
+        
+        // Job drawer should open
+        const jobDrawer = page.locator('[data-testid="job-drawer"]');
+        await expect(jobDrawer).toBeVisible({ timeout: 3000 });
+        
+        // Should show timeline
+        const timeline = jobDrawer.locator('[data-testid="job-timeline"]');
+        await expect(timeline).toBeVisible();
+        
+        console.log('✅ Job details view working');
+      }
+    }
+  });
+});

@@ -1,0 +1,126 @@
+{
+  "dashboard": {
+    "title": "🏢 Office Runtime",
+    "tags": ["office"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Job Execution Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(job_executions_total{job=\"office\"}[5m]) by (status)",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos":  {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Job Execution Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(job_execution_duration_seconds_bucket{job=\"office\"}[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(job_execution_duration_seconds_bucket{job=\"office\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(job_execution_duration_seconds_bucket{job=\"office\"}[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes":  [{"format": "s"}],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "LLM API Calls",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_api_calls_total{job=\"office\"}[5m]) by (provider, model)",
+            "legendFormat":  "{{provider}} - {{model}}"
+          }
+        ],
+        "gridPos": {"h":  8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id":  4,
+        "title":  "LLM Token Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_tokens_consumed_total{job=\"office\"}[5m]) by (entity_id)",
+            "legendFormat": "{{entity_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Active Entities",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "active_entities{job=\"office\"}",
+            "legendFormat":  "Total"
+          },
+          {
+            "expr": "active_sessions{job=\"office\"}",
+            "legendFormat": "Sessions"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y":  16}
+      },
+      {
+        "id": 6,
+        "title": "Circuit Breaker State",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "circuit_breaker_state{job=\"office\"} by (dependency)",
+            "legendFormat": "{{dependency}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults":  {
+            "mappings": [
+              {"value": 0, "text": "CLOSED", "color": "green"},
+              {"value": 1, "text": "OPEN", "color": "red"},
+              {"value": 2, "text": "HALF-OPEN", "color": "yellow"}
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Tool Calls",
+        "type":  "graph",
+        "targets":  [
+          {
+            "expr": "rate(tool_calls_total{job=\"office\"}[5m]) by (tool_name)",
+            "legendFormat":  "{{tool_name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y":  20}
+      },
+      {
+        "id": 8,
+        "title": "Constitution Enforcement",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(constitution_checks_total{job=\"office\"}[5m]) by (result)",
+            "legendFormat": "{{result}}"
+          }
+        ],
+        "gridPos":  {"h": 8, "w": 12, "x": 12, "y": 20}
+      }
+    ]
+  }
+}

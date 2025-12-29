@@ -1,0 +1,64 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Authentication', () => {
+  test('demo mode login works', async ({ page }) => {
+    await page.goto('/');
+    
+    // Should show login page
+    const loginPage = page.locator('[data-testid="login-page"]');
+    await expect(loginPage).toBeVisible({ timeout: 5000 });
+    
+    // Click demo login
+    const demoButton = page.locator('[data-testid="login-demo"]');
+    await expect(demoButton).toBeVisible();
+    await demoButton. click();
+    
+    // Should navigate to chat page
+    await page.waitForSelector('[data-testid="chat-page"]', { timeout: 5000 });
+    
+    // Should see conversation list
+    const conversationList = page.locator('[data-testid="conversation-list"]');
+    await expect(conversationList).toBeVisible();
+    
+    console.log('✅ Demo login working');
+  });
+  
+  test('logout works', async ({ page }) => {
+    await page.goto('/');
+    
+    // Login first
+    const demoButton = page.locator('[data-testid="login-demo"]');
+    if (await demoButton.isVisible()) {
+      await demoButton.click();
+      await page.waitForSelector('[data-testid="chat-page"]');
+    }
+    
+    // Find and click logout
+    const userMenu = page.locator('[data-testid="user-menu"]');
+    if (await userMenu. isVisible({ timeout: 2000 })) {
+      await userMenu.click();
+      
+      const logoutButton = page.locator('[data-testid="logout-btn"]');
+      await logoutButton.click();
+      
+      // Should return to login page
+      await page. waitForSelector('[data-testid="login-page"]', { timeout: 5000 });
+      
+      console.log('✅ Logout working');
+    }
+  });
+  
+  test('unauthenticated users redirected to login', async ({ page }) => {
+    // Clear cookies/storage
+    await page.context().clearCookies();
+    await page.context().clearPermissions();
+    
+    await page.goto('/');
+    
+    // Should show login page
+    const loginPage = page.locator('[data-testid="login-page"]');
+    await expect(loginPage).toBeVisible({ timeout: 5000 });
+    
+    console.log('✅ Auth redirect working');
+  });
+});

@@ -34,6 +34,7 @@ mod id_routes;
 mod auth;
 mod rate_limit;
 mod metrics;
+mod otel_tracing;
 mod id_ledger;
 mod id_session_token;
 mod repo_routes;
@@ -556,13 +557,33 @@ async fn main() -> anyhow::Result<()> {
     // Load .env
     dotenvy::dotenv().ok();
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ubl_server=info".parse().unwrap()),
-        )
-        .init();
+    // Initialize OpenTelemetry tracing
+    let otlp_endpoint = std::env::var("OTLP_ENDPOINT")
+        .ok()
+        .or_else(|| std::env::var("JAEGER_ENDPOINT").ok());
+    
+    if let Some(endpoint) = otlp_endpoint.as_deref() {
+        if let Err(e) = otel_tracing::init_tracing("ubl-server", "2.0.0", Some(endpoint)) {
+            warn!("Failed to initialize OpenTelemetry tracing: {}. Falling back to basic tracing.", e);
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env()
+                        .add_directive("ubl_server=info".parse().unwrap()),
+                )
+                .init();
+        } else {
+            info!("🔍 OpenTelemetry tracing initialized: {}", endpoint);
+        }
+    } else {
+        // Fallback to basic tracing if OTLP endpoint not configured
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::from_default_env()
+                    .add_directive("ubl_server=info".parse().unwrap()),
+            )
+            .init();
+        info!("📝 Basic tracing initialized (OpenTelemetry disabled - set OTLP_ENDPOINT to enable)");
+    }
 
     // Initialize KeyStore (Gemini P0 #1)
     keystore::init();

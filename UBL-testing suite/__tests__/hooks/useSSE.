@@ -1,0 +1,69 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import { useSSE } from '../../hooks/useSSE';
+import { SSEClient } from '../../__mocks__/sse';
+
+vi.mock('../../services/sse', () => ({
+  SSEClient: vi.fn().mockImplementation((baseUrl, tenantId) => {
+    const client = new (require('../../__mocks__/sse').SSEClient)(baseUrl, tenantId);
+    return client;
+  }),
+}));
+
+vi.mock('../../services/apiClient', () => ({
+  getBaseUrl: () => 'http://localhost:8080',
+}));
+
+describe('useSSE', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates SSE client on mount', () => {
+    const { result } = renderHook(() => useSSE('test-tenant'));
+    
+    expect(result.current.client).toBeDefined();
+  });
+
+  it('connects to SSE stream', async () => {
+    const { result } = renderHook(() => useSSE('test-tenant'));
+    
+    await waitFor(() => {
+      expect(result. current.client?. isConnected()).toBe(true);
+    });
+  });
+
+  it('registers event handlers', async () => {
+    const mockHandler = vi.fn();
+    
+    renderHook(() =>
+      useSSE('test-tenant', {
+        'timeline. append': mockHandler,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockHandler).toHaveBeenCalledTimes(0); // Not called yet
+    });
+  });
+
+  it('returns cursor', () => {
+    const { result } = renderHook(() => useSSE('test-tenant'));
+    
+    expect(result.current.getCursor()).toBe('0:0');
+  });
+
+  it('disconnects on unmount', async () => {
+    const { result, unmount } = renderHook(() => useSSE('test-tenant'));
+    
+    await waitFor(() => {
+      expect(result.current.client?.isConnected()).toBe(true);
+    });
+
+    unmount();
+
+    await waitFor(() => {
+      expect(result.current.client?.isConnected()).toBe(false);
+    });
+  });
+});

@@ -29,8 +29,8 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Database (for persistent ledger)
-# NOTE: "offline" feature allows compilation without DATABASE_URL by using cached query metadata
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "time", "json", "offline"], default-features = false }
+# NOTE: Use sqlx-cli to generate offline query metadata: `cargo sqlx prepare`
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "time", "json"], default-features = false }
 time = { version = "0.3", features = ["formatting", "macros", "serde"] }
 
 # WebAuthn

@@ -1,0 +1,49 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/messenger/frontend/**'
+  pull_request:
+    branches:  [main, develop]
+    paths:
+      - 'apps/messenger/frontend/**'
+
+jobs: 
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/messenger/frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: apps/messenger/frontend
+        run: npm ci
+      
+      - name: Run tests
+        working-directory: apps/messenger/frontend
+        run: npm run test:coverage
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          directory:  apps/messenger/frontend/coverage
+          flags: frontend
+          name: messenger-frontend
+      
+      - name: Check coverage thresholds
+        working-directory: apps/messenger/frontend
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+          if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+            echo "Coverage $COVERAGE% is below 90% threshold"
+            exit 1
+          fi

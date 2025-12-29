@@ -1,0 +1,114 @@
+//! Message Flow Integration Tests
+//! Tests complete message flow:  Frontend → UBL → Office → Frontend
+
+use integration_tests::*;
+use anyhow::Result;
+use std::time::Duration;
+use tokio::time::sleep;
+
+#[tokio::test]
+async fn test_send_message_complete_flow() -> Result<()> {
+    let ctx = setup().await?;
+    
+    // 1. Bootstrap to get conversation
+    let bootstrap = ctx.ubl_client.bootstrap("T. UBL").await?;
+    
+    let conversation_id = if let Some(conv) = bootstrap.conversations.first() {
+        conv["id"].as_str().unwrap().to_string()
+    } else {
+        // Create conversation if none exist
+        test_id("conv")
+    };
+    
+    // 2. Send message
+    let message_content = "Hello from integration test!";
+    let send_result = ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id:  conversation_id.clone(),
+        content: message_content.to_string(),
+        idempotency_key: Some(test_id("idem")),
+    }).await?;
+    
+    assert! (!send_result.message_id.is_empty());
+    assert! (!send_result.hash.is_empty());
+    
+    println!("✅ Message sent:  {}", send_result.message_id);
+    
+    // 3. Wait for message to appear in timeline
+    sleep(Duration::from_secs(2)).await;
+    
+    let timeline = ctx.ubl_client.get_conversation_timeline(&conversation_id, None).await?;
+    
+    let message_found = timeline.items.iter().any(|item| {
+        item["item_type"] == "message" &&
+        item["item_data"]["content"] == message_content
+    });
+    
+    assert!(message_found, "Message should appear in timeline");
+    
+    println!("✅ Message flow complete");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_message_triggers_office_response() -> Result<()> {
+    let ctx = setup().await?;
+    
+    // 1. Get or create conversation
+    let bootstrap = ctx.ubl_client. bootstrap("T.UBL").await?;
+    let conversation_id = bootstrap.conversations.first()
+        .and_then(|c| c["id"].as_str())
+        .unwrap_or("conv_test")
+        .to_string();
+    
+    // 2. Send message that might trigger Office response
+    let message_content = "Can you help me with a task?";
+    ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id: conversation_id. clone(),
+        content: message_content.to_string(),
+        idempotency_key: Some(test_id("idem")),
+    }).await?;
+    
+    // 3. Wait for Office to potentially respond or create job
+    sleep(Duration::from_secs(3)).await;
+    
+    let timeline = ctx.ubl_client. get_conversation_timeline(&conversation_id, None).await?;
+    
+    // Office might respond with message or job card
+    assert!(timeline.items.len() >= 1, "Timeline should have items");
+    
+    println!("✅ Office integration working");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_idempotency_prevents_duplicates() -> Result<()> {
+    let ctx = setup().await?;
+    
+    let bootstrap = ctx.ubl_client.bootstrap("T.UBL").await?;
+    let conversation_id = bootstrap.conversations.first()
+        .and_then(|c| c["id"].as_str())
+        .unwrap_or("conv_test")
+        .to_string();
+    
+    let idempotency_key = test_id("idem");
+    let message_content = "Duplicate test message";
+    
+    // Send same message twice with same idempotency key
+    let result1 = ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id:  conversation_id.clone(),
+        content: message_content.to_string(),
+        idempotency_key:  Some(idempotency_key.clone()),
+    }).await?;
+    
+    let result2 = ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id: conversation_id.clone(),
+        content: message_content.to_string(),
+        idempotency_key: Some(idempotency_key.clone()),
+    }).await?;
+    
+    // Should return same message_id (idempotency)
+    assert_eq!(result1.message_id, result2.message_id);
+    
+    println!("✅ Idempotency working");
+    Ok(())
+}

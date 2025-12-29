@@ -1,0 +1,119 @@
+name: Integration Tests (Full Stack)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches:  [main]
+  schedule:
+    - cron: '0 0 * * *' # Daily at midnight
+
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: postgres://ubl_test:test_password@localhost: 5432/ubl_test
+
+jobs:
+  full-stack-integration:
+    name: Full Stack Integration
+    runs-on: ubuntu-latest
+    
+    services: 
+      postgres:
+        image: postgres:16-alpine
+        env: 
+          POSTGRES_USER: ubl_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ubl_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: 
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version:  '20'
+          cache: 'npm'
+          cache-dependency-path: apps/messenger/frontend/package-lock.json
+      
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+      
+      - name: Setup database
+        working-directory: ubl/kernel/rust/ubl-server
+        run: |
+          sqlx database create
+          sqlx migrate run
+      
+      - name: Build UBL Kernel
+        working-directory: ubl/kernel/rust
+        run: cargo build --release --bin ubl-server
+      
+      - name: Build Office
+        working-directory: apps/office
+        run: cargo build --release
+      
+      - name: Install frontend dependencies
+        working-directory: apps/messenger/frontend
+        run:  npm ci
+      
+      - name: Build frontend
+        working-directory: apps/messenger/frontend
+        run:  npm run build
+      
+      - name: Start UBL Kernel
+        working-directory: ubl/kernel/rust
+        run: |
+          ./target/release/ubl-server &
+          echo $! > /tmp/ubl-server.pid
+          sleep 5
+      
+      - name: Start Office
+        working-directory: apps/office
+        env:
+          OFFICE__LLM__API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OFFICE__UBL__ENDPOINT: http://localhost:8080
+        run: |
+          ./target/release/office &
+          echo $! > /tmp/office.pid
+          sleep 5
+      
+      - name: Health check - UBL
+        run: curl -f http://localhost:8080/health || exit 1
+      
+      - name: Health check - Office
+        run: curl -f http://localhost:8081/health || exit 1
+      
+      - name: Run integration tests
+        working-directory:  ubl/kernel/rust
+        run: cargo test --test integration_full_stack -- --test-threads=1
+      
+      - name: Run E2E tests
+        working-directory: apps/messenger/frontend
+        run: npm run test:e2e
+      
+      - name: Stop services
+        if: always()
+        run: |
+          kill $(cat /tmp/ubl-server.pid) || true
+          kill $(cat /tmp/office.pid) || true
+      
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: service-logs
+          path: |
+            /tmp/*. log
+            ubl/kernel/rust/*. log
+            apps/office/*.log

@@ -1,0 +1,22 @@
+groups:
+  - name: throughput_recording_rules
+    interval: 30s
+    rules:
+      - record: ubl_kernel:http_requests_per_second
+        expr: rate(ubl_kernel_http_requests_total[1m])
+      
+      - record: office:http_requests_per_second
+        expr: rate(office_http_requests_total[1m])
+      
+      - record: messenger:messages_per_second
+        expr: rate(messenger_messages_sent_total[1m])
+      
+      - record: messenger:jobs_per_second
+        expr: rate(messenger_jobs_created_total[1m])
+      
+      - record: ubl:ledger_appends_per_second
+        expr: rate(ubl_ledger_append_total[1m])
+      
+      - record: ubl:projection_updates_per_second
+        expr: rate(ubl_projection_update_total[1m])
+

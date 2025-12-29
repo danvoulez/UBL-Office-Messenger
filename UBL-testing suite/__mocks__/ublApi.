@@ -1,0 +1,61 @@
+import { vi } from 'vitest';
+import { Entity, Conversation, Message } from '../types';
+
+export const mockEntities: Entity[] = [
+  {
+    id: 'user-test',
+    name: 'Test User',
+    avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Test',
+    type: 'human',
+    status: 'online',
+  },
+  {
+    id:  'agent-test',
+    name: 'Test Agent',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Agent',
+    type: 'agent',
+    status: 'online',
+  },
+];
+
+export const mockConversations:  Conversation[] = [
+  {
+    id: 'conv-test',
+    participants: ['user-test', 'agent-test'],
+    isGroup: false,
+    unreadCount: 0,
+    lastMessage: 'Hello!',
+    lastMessageTime: '1m',
+  },
+];
+
+export const mockMessages: Message[] = [
+  {
+    id: 'msg-1',
+    conversationId: 'conv-test',
+    senderId: 'user-test',
+    content: 'Hello!',
+    timestamp: new Date().toISOString(),
+    role: 'user',
+    status: 'sent',
+  },
+];
+
+export const ublApi = {
+  health: vi.fn().mockResolvedValue({ ok: true }),
+  bootstrap: vi.fn().mockResolvedValue({
+    entities: mockEntities,
+    conversations: mockConversations,
+    messages: mockMessages,
+  }),
+  sendMessage: vi.fn().mockResolvedValue({ id: 'msg-new', success: true }),
+  sendMessageViaGateway: vi.fn().mockResolvedValue({ id: 'msg-new', success: true }),
+  createConversation: vi.fn().mockResolvedValue({ id:  'conv-new', success:  true }),
+  approveJob: vi.fn().mockResolvedValue({ success: true }),
+  rejectJob: vi.fn().mockResolvedValue({ success: true }),
+  jobActionViaGateway: vi.fn().mockResolvedValue({ success: true }),
+  getConversationTimeline: vi.fn().mockResolvedValue({ items: [] }),
+  getJobDetails: vi.fn().mockResolvedValue({ job: null }),
+};
+
+export default ublApi;

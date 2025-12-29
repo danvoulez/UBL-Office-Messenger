@@ -135,6 +135,8 @@ impl UblClient {
             event_data: serde_json::Value,
             created_at_ms: i64,
             entry_hash: Option<String>,
+            sequence: Option<u64>,
+            author_pubkey: Option<String>,
         }
 
         let audit_resp: AuditResponse = resp.json().await
@@ -144,6 +146,8 @@ impl UblClient {
         let events = audit_resp.data.into_iter().map(|row| {
             LedgerEvent {
                 entry_hash: row.entry_hash.unwrap_or_default(),
+                sequence: row.sequence.unwrap_or(0),
+                author_pubkey: row.author_pubkey.unwrap_or_default(),
                 intent_class: row.event_type.clone(),
                 timestamp: chrono::DateTime::from_timestamp_millis(row.created_at_ms)
                     .unwrap_or_else(chrono::Utc::now),

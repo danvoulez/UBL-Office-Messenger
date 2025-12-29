@@ -1,0 +1,69 @@
+groups:
+  - name: application_alerts
+    interval: 60s
+    rules:
+      # SLO Violations - Availability
+      - alert: SLOAvailabilityViolation
+        expr:  (sum(rate(http_requests_total{status! ~"5.."}[30m])) / sum(rate(http_requests_total[30m]))) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary:  "SLO availability violation"
+          description: "Availability is {{ $value | humanizePercentage }} (target: 99.9%)"
+
+      # SLO Violations - Latency
+      - alert: SLOLatencyViolation
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[10m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          slo: latency
+        annotations:
+          summary: "SLO latency violation"
+          description: "P95 latency is {{ $value }}s (target: 0.5s)"
+
+      # Message Throughput Drop
+      - alert: MessageThroughputDrop
+        expr:  rate(messages_sent_total[5m]) < 10
+        for: 10m
+        labels:
+          severity: info
+          component: messaging
+        annotations:
+          summary:  "Message throughput dropped"
+          description: "Message rate:  {{ $value }}/sec (expected: >10/sec)"
+
+      # Projection Lag
+      - alert: ProjectionLag
+        expr: ledger_sequence - projection_sequence > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: projections
+        annotations:
+          summary:  "Projection lag detected"
+          description: "Projection is {{ $value }} events behind ledger"
+
+      # Failed Login Attempts
+      - alert: HighFailedLoginAttempts
+        expr: rate(auth_login_failures_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: auth
+        annotations:
+          summary: "High failed login attempt rate"
+          description: "Failed login rate: {{ $value }}/sec - possible attack"
+
+      # Policy Violations
+      - alert: PolicyViolations
+        expr: rate(policy_violations_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: policy
+        annotations:
+          summary: "Policy violations detected"
+          description:  "Policy violation rate: {{ $value }}/sec"

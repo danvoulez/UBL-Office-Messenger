@@ -1,0 +1,22 @@
+groups:
+  - name: latency_recording_rules
+    interval: 30s
+    rules:
+      - record: ubl_kernel:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, rate(ubl_kernel_http_request_duration_seconds_bucket[5m]))
+      
+      - record: ubl_kernel:http_request_duration_seconds:p95
+        expr: histogram_quantile(0.95, rate(ubl_kernel_http_request_duration_seconds_bucket[5m]))
+      
+      - record: ubl_kernel:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, rate(ubl_kernel_http_request_duration_seconds_bucket[5m]))
+      
+      - record: office:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, rate(office_http_request_duration_seconds_bucket[5m]))
+      
+      - record: office:http_request_duration_seconds:p95
+        expr: histogram_quantile(0.95, rate(office_http_request_duration_seconds_bucket[5m]))
+      
+      - record: office:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, rate(office_http_request_duration_seconds_bucket[5m]))
+

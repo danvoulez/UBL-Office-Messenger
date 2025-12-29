@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  office-test-runner:
+    build: 
+      context: .
+      dockerfile: Dockerfile. test
+    environment:
+      RUST_BACKTRACE: "1"
+      RUST_LOG: "debug"
+      OFFICE__LLM__API_KEY: "test-key"
+      OFFICE__UBL__ENDPOINT: "http://mock-ubl:8080"
+    volumes:
+      - ./:/workspace
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/workspace/target
+    command: cargo test --all-features -- --nocapture
+  
+  mock-ubl:
+    image:  wiremock/wiremock: latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./tests/mocks/ubl:/home/wiremock
+    command: ["--port", "8080", "--root-dir", "/home/wiremock"]
+
+volumes:
+  cargo_cache: 
+  target_cache:

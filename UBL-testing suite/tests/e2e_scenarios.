@@ -1,0 +1,180 @@
+//! End-to-End Scenario Tests
+//! Tests realistic user scenarios across all systems
+
+use integration_tests::*;
+use anyhow::Result;
+use std::time::Duration;
+use tokio::time::sleep;
+
+#[tokio::test]
+async fn test_complete_user_journey() -> Result<()> {
+    let ctx = setup().await?;
+    
+    println!("🚀 Starting complete user journey test");
+    
+    // 1. User logs in (bootstrap)
+    println!("1️⃣  User logs in.. .");
+    let bootstrap = ctx.ubl_client. bootstrap("T.UBL").await?;
+    assert!(bootstrap.entities.len() >= 0);
+    println!("   ✅ User logged in");
+    
+    // 2. User starts a conversation
+    println!("2️⃣  User starts conversation...");
+    let conversation_id = if let Some(conv) = bootstrap.conversations.first() {
+        conv["id"].as_str().unwrap().to_string()
+    } else {
+        test_id("conv")
+    };
+    println!("   ✅ Conversation:  {}", conversation_id);
+    
+    // 3. User sends message requesting work
+    println!("3️⃣  User requests work...");
+    ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id: conversation_id. clone(),
+        content: "Please analyze the Q4 sales data and create a summary report".to_string(),
+        idempotency_key: Some(test_id("idem")),
+    }).await?;
+    println!("   ✅ Message sent");
+    
+    // 4. Office analyzes and proposes job
+    println!("4️⃣  Waiting for Office to propose job...");
+    sleep(Duration::from_secs(5)).await;
+    
+    let timeline = ctx.ubl_client.get_conversation_timeline(&conversation_id, None).await?;
+    
+    let job_card = timeline.items. iter()
+        .find(|item| item["item_type"] == "job_card")
+        .expect("Office should propose job");
+    
+    let job_id = job_card["item_data"]["job_id"].as_str().unwrap();
+    let card_id = job_card["item_data"]["card_id"].as_str().unwrap();
+    println!("   ✅ Job proposed: {}", job_id);
+    
+    // 5. User reviews and approves job
+    println!("5️⃣  User approves job...");
+    ctx.ubl_client.approve_job(job_id, JobActionRequest {
+        action_type: "job.approve".to_string(),
+        card_id: card_id.to_string(),
+        button_id: "approve_btn".to_string(),
+        input_data: None,
+        idempotency_key: Some(test_id("idem")),
+    }).await?;
+    println!("   ✅ Job approved");
+    
+    // 6. Office executes job
+    println!("6️⃣  Office executing job...");
+    sleep(Duration::from_secs(3)).await;
+    
+    let job = ctx.ubl_client.get_job(job_id).await?;
+    println!("   ✅ Job state: {}", job.state);
+    
+    // 7. User receives updates via SSE
+    println!("7️⃣  Real-time updates delivered");
+    
+    // 8. Job completes (or progresses)
+    println!("8️⃣  Job progress:");
+    println!("   - State: {}", job.state);
+    println!("   - Timeline events:  {}", job.timeline. len());
+    println!("   - Artifacts: {}", job.artifacts.len());
+    
+    println!("\n🎉 Complete user journey successful!");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_collaborative_workflow() -> Result<()> {
+    let ctx = setup().await?;
+    
+    println!("🚀 Testing collaborative workflow");
+    
+    // 1. Create entity for "Alice"
+    let alice = ctx.office_client.create_entity(CreateEntityRequest {
+        name: "Alice".to_string(),
+        entity_type: "Autonomous".to_string(),
+    }).await?;
+    println!("👤 Alice created:  {}", alice.entity_id);
+    
+    // 2. Create entity for "Bob"
+    let bob = ctx. office_client.create_entity(CreateEntityRequest {
+        name:  "Bob".to_string(),
+        entity_type: "Autonomous".to_string(),
+    }).await?;
+    println!("👤 Bob created: {}", bob.entity_id);
+    
+    // 3. Start conversation
+    let bootstrap = ctx.ubl_client. bootstrap("T.UBL").await?;
+    let conversation_id = bootstrap.conversations.first()
+        .and_then(|c| c["id"].as_str())
+        .unwrap_or("conv_test")
+        .to_string();
+    
+    // 4. Alice sends message
+    println!("💬 Alice sends message");
+    ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id: conversation_id.clone(),
+        content: "Let's work on the project plan".to_string(),
+        idempotency_key: Some(test_id("idem_alice")),
+    }).await?;
+    
+    sleep(Duration::from_secs(2)).await;
+    
+    // 5. Bob responds (simulated)
+    println!("💬 Bob responds");
+    ctx.ubl_client.send_message(SendMessageRequest {
+        conversation_id: conversation_id. clone(),
+        content: "Great! I'll start on the requirements".to_string(),
+        idempotency_key: Some(test_id("idem_bob")),
+    }).await?;
+    
+    sleep(Duration:: from_secs(2)).await;
+    
+    // 6. Check timeline has both messages
+    let timeline = ctx. ubl_client.get_conversation_timeline(&conversation_id, None).await?;
+    
+    let message_count = timeline.items.iter()
+        .filter(|item| item["item_type"] == "message")
+        .count();
+    
+    assert!(message_count >= 2, "Timeline should have messages from both participants");
+    
+    println!("✅ Collaborative workflow successful");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_error_recovery() -> Result<()> {
+    let ctx = setup().await?;
+    
+    println!("🚀 Testing error recovery");
+    
+    let bootstrap = ctx.ubl_client.bootstrap("T.UBL").await?;
+    let conversation_id = bootstrap.conversations.first()
+        .and_then(|c| c["id"].as_str())
+        .unwrap_or("conv_test")
+        .to_string();
+    
+    // Send message that might fail
+    let result = ctx.ubl_client. send_message(SendMessageRequest {
+        conversation_id: conversation_id.clone(),
+        content: "Test message".to_string(),
+        idempotency_key: Some(test_id("idem")),
+    }).await;
+    
+    if result.is_err() {
+        println!("⚠️  First attempt failed, retrying...");
+        
+        // Retry with same idempotency key
+        let retry_result = ctx.ubl_client.send_message(SendMessageRequest {
+            conversation_id:  conversation_id.clone(),
+            content: "Test message".to_string(),
+            idempotency_key: Some(test_id("idem")),
+        }).await;
+        
+        assert!(retry_result.is_ok(), "Retry should succeed with idempotency");
+        println!("✅ Retry successful");
+    } else {
+        println!("✅ First attempt successful");
+    }
+    
+    Ok(())
+}

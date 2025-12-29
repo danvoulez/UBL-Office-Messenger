@@ -1,0 +1,91 @@
+groups:
+  - name: ubl_kernel_alerts
+    interval: 30s
+    rules:
+      # Service Down
+      - alert: UBLKernelDown
+        expr: up{job="ubl-kernel"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ubl-kernel
+        annotations:
+          summary: "UBL Kernel is down"
+          description: "UBL Kernel has been down for more than 1 minute"
+
+      # High Error Rate
+      - alert: UBLKernelHighErrorRate
+        expr: rate(http_requests_total{job="ubl-kernel",status=~"5.."}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: ubl-kernel
+        annotations:
+          summary:  "High error rate in UBL Kernel"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # High Latency
+      - alert:  UBLKernelHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="ubl-kernel"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: ubl-kernel
+        annotations:
+          summary: "High latency in UBL Kernel"
+          description: "P95 latency is {{ $value }}s (threshold: 0.5s)"
+
+      # Database Connection Pool Exhaustion
+      - alert:  UBLKernelDatabasePoolExhausted
+        expr:  db_connection_pool_active{job="ubl-kernel"} / db_connection_pool_max{job="ubl-kernel"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: ubl-kernel
+        annotations:
+          summary:  "Database connection pool near exhaustion"
+          description: "Connection pool is {{ $value | humanizePercentage }} full"
+
+      # Ledger Append Failures
+      - alert: UBLKernelLedgerAppendFailures
+        expr: rate(ledger_append_errors_total{job="ubl-kernel"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: ubl-kernel
+        annotations:
+          summary: "Ledger append failures detected"
+          description: "Ledger append error rate:  {{ $value }} errors/sec"
+
+      # SSE Connection Issues
+      - alert: UBLKernelSSEConnectionDrop
+        expr: rate(sse_connections_dropped_total{job="ubl-kernel"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: ubl-kernel
+        annotations:
+          summary: "High SSE connection drop rate"
+          description: "SSE connections dropping at {{ $value }}/sec"
+
+      # Memory Usage
+      - alert: UBLKernelHighMemory
+        expr: container_memory_usage_bytes{name="ubl-kernel"} / container_spec_memory_limit_bytes{name="ubl-kernel"} > 0.85
+        for: 5m
+        labels: 
+          severity: warning
+          service:  ubl-kernel
+        annotations: 
+          summary: "High memory usage in UBL Kernel"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # CPU Usage
+      - alert: UBLKernelHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name="ubl-kernel"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: ubl-kernel
+        annotations:
+          summary: "High CPU usage in UBL Kernel"
+          description: "CPU usage is {{ $value | humanizePercentage }}"

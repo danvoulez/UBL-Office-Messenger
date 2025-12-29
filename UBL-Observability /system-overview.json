@@ -1,0 +1,157 @@
+{
+  "dashboard": {
+    "title":  "🌍 System Overview",
+    "tags": ["overview", "ubl"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"ubl-kernel|office|postgres\"}",
+            "legendFormat":  "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults":  {
+            "mappings": [
+              {"value": 0, "text": "DOWN", "color": "red"},
+              {"value": 1, "text": "UP", "color": "green"}
+            ],
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0}
+      },
+      {
+        "id":  2,
+        "title":  "Request Rate (req/s)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total[5m])) by (job)",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "gridPos":  {"h": 8, "w": 12, "x": 0, "y":  4}
+      },
+      {
+        "id": 3,
+        "title": "P95 Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) by (job)",
+            "legendFormat": "{{job}} p95"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x":  12, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr":  "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (job) / sum(rate(http_requests_total[5m])) by (job)",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Error Rate"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0. 05], "type": "gt"},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ],
+          "name": "High Error Rate"
+        },
+        "gridPos": {"h": 8, "w": 12, "x":  0, "y": 12}
+      },
+      {
+        "id": 5,
+        "title": "CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr":  "rate(container_cpu_usage_seconds_total{name=~\"ubl-kernel|office\"}[5m])",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "CPU"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x":  12, "y": 12}
+      },
+      {
+        "id": 6,
+        "title": "Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name=~\"ubl-kernel|office\"} / container_spec_memory_limit_bytes{name=~\"ubl-kernel|office\"}",
+            "legendFormat":  "{{name}}"
+          }
+        ],
+        "yaxes": [
+          {"format":  "percentunit", "label": "Memory"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x":  0, "y": 20}
+      },
+      {
+        "id": 7,
+        "title": "Active Connections",
+        "type":  "stat",
+        "targets": [
+          {
+            "expr": "sse_active_connections{job=\"ubl-kernel\"}",
+            "legendFormat": "SSE Connections"
+          },
+          {
+            "expr":  "db_connection_pool_active{job=\"ubl-kernel\"}",
+            "legendFormat": "DB Connections"
+          }
+        ],
+        "gridPos":  {"h": 4, "w": 12, "x": 12, "y": 20}
+      },
+      {
+        "id": 8,
+        "title": "Business Metrics",
+        "type":  "stat",
+        "targets": [
+          {
+            "expr": "increase(messages_sent_total[1h])",
+            "legendFormat":  "Messages (1h)"
+          },
+          {
+            "expr": "increase(jobs_created_total[1h])",
+            "legendFormat": "Jobs (1h)"
+          },
+          {
+            "expr": "active_users",
+            "legendFormat": "Active Users"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 24, "x": 0, "y": 24}
+      }
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

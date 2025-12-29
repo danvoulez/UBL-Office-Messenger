@@ -1,0 +1,22 @@
+# Note: Jaeger all-in-one doesn't use a config file by default
+# This is for reference if using Jaeger production deployment
+
+sampling:
+  default_strategy:
+    type: probabilistic
+    param: 0.1  # Sample 10% of traces
+
+reporter:
+  log_spans: true
+  max_queue_size: 1000
+
+storage:
+  type: badger
+  badger:
+    ephemeral:  false
+    directory_key: /badger/key
+    directory_value: /badger/data
+
+query:
+  base_path: /
+  ui_config: /etc/jaeger/ui-config.json

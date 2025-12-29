@@ -586,7 +586,7 @@ async fn exec_finish(
     });
 
     // Canonicalize for signature
-    let receipt_bytes = match crypto::ubl_atom_compat::canonicalize(&receipt_payload) {
+    let receipt_bytes = match crate::crypto::ubl_atom_compat::canonicalize(&receipt_payload) {
         Ok(b) => b,
         Err(e) => {
             return (

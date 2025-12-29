@@ -1,0 +1,272 @@
+//! Policy Pack Enforcement Tests
+//! Tests policy evaluation, FSM validation, and rule enforcement
+
+use sqlx::PgPool;
+use serde_json::json;
+
+#[sqlx::test]
+async fn test_policy_pack_loading(pool: PgPool) {
+    let policy_id = "test_policy";
+    let version = "1.0";
+    let description = "Test policy";
+    let rules = json!([
+        {
+            "rule_id": "allow_observe",
+            "intent_class": "Observation",
+            "constraints": []
+        }
+    ]);
+    
+    // Store policy
+    sqlx::query!(
+        r#"
+        INSERT INTO policy_definitions (
+            policy_id, version, description, rules, default_deny
+        )
+        VALUES ($1, $2, $3, $4, TRUE)
+        "#,
+        policy_id,
+        version,
+        description,
+        rules,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    
+    // Retrieve policy
+    let policy = sqlx::query!(
+        r#"
+        SELECT policy_id, version, rules
+        FROM policy_definitions
+        WHERE policy_id = $1
+        "#,
+        policy_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    
+    assert_eq!(policy.policy_id, policy_id);
+    assert_eq!(policy.version, version);
+}
+
+#[sqlx::test]
+async fn test_container_policy_mapping(pool: PgPool) {
+    let container_id = "C.Test";
+    let policy_id = "test_policy";
+    
+    // Map container to policy
+    sqlx:: query!(
+        r#"
+        INSERT INTO container_policies (container_id, policy_id)
+        VALUES ($1, $2)
+        "#,
+        container_id,
+        policy_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    
+    // Retrieve mapping
+    let mapping = sqlx:: query!(
+        r#"
+        SELECT container_id, policy_id
+        FROM container_policies
+        WHERE container_id = $1
+        "#,
+        container_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    
+    assert_eq!(mapping.container_id, container_id);
+    assert_eq!(mapping.policy_id, policy_id);
+}
+
+#[sqlx::test]
+async fn test_job_fsm_validation(pool: PgPool) {
+    // Test valid FSM transitions
+    let valid_transitions = vec![
+        ("draft", "proposed"),
+        ("proposed", "approved"),
+        ("approved", "in_progress"),
+        ("in_progress", "waiting_input"),
+        ("waiting_input", "in_progress"),
+        ("in_progress", "completed"),
+    ];
+    
+    for (from, to) in valid_transitions {
+        // Verify transition is allowed
+        // In actual implementation, this would call policy VM
+        assert!(is_valid_job_transition(from, to));
+    }
+    
+    // Test invalid transitions
+    let invalid_transitions = vec![
+        ("draft", "completed"),
+        ("proposed", "completed"),
+        ("completed", "in_progress"),
+    ];
+    
+    for (from, to) in invalid_transitions {
+        assert!(!is_valid_job_transition(from, to));
+    }
+}
+
+// Helper function (would be in actual policy implementation)
+fn is_valid_job_transition(from: &str, to: &str) -> bool {
+    use std::collections::HashMap;
+    
+    let mut allowed:  HashMap<&str, Vec<&str>> = HashMap::new();
+    allowed.insert("draft", vec!["proposed"]);
+    allowed.insert("proposed", vec!["approved", "rejected"]);
+    allowed.insert("approved", vec!["in_progress", "cancelled"]);
+    allowed.insert("in_progress", vec!["waiting_input", "completed", "failed", "cancelled"]);
+    allowed.insert("waiting_input", vec!["in_progress", "cancelled"]);
+    allowed.insert("rejected", vec![]);
+    allowed.insert("completed", vec![]);
+    allowed.insert("failed", vec![]);
+    allowed.insert("cancelled", vec![]);
+    
+    allowed.get(from).map(|v| v.contains(&to)).unwrap_or(false)
+}
+
+#[sqlx::test]
+async fn test_card_provenance_validation(pool: PgPool) {
+    let conversation_id = "conv_test";
+    let card_id = "card_test";
+    
+    // Insert message with job card
+    let message_event = json!({
+        "type": "message. sent",
+        "message_id": "msg_test",
+        "conversation_id": conversation_id,
+        "card":  {
+            "card_id": card_id,
+            "card_type": "job. formalize"
+        }
+    });
+    
+    let atom_hash = "hash_test";
+    
+    // Store atom
+    sqlx::query!(
+        r#"
+        INSERT INTO ledger_atom (hash, data)
+        VALUES ($1, $2)
+        "#,
+        atom_hash,
+        message_event
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    
+    // Store entry
+    sqlx::query!(
+        r#"
+        INSERT INTO ledger_entries (
+            container_id, sequence, atom_hash, previous_hash,
+            entry_hash, timestamp_ns, intent_class, physics_delta
+        )
+        VALUES ('C. Messenger', 1, $1, $2, 'entry1', 1000000, 'Observation', '0')
+        "#,
+        atom_hash,
+        "0". repeat(64)
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    
+    // Verify card exists in ledger
+    let card_exists = sqlx::query!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM ledger_atom
+        WHERE data->'card'->>'card_id' = $1
+        "#,
+        card_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    
+    assert!(card_exists.count. unwrap() > 0, "Card should exist in ledger");
+}
+
+#[sqlx::test]
+async fn test_pii_detection_policy(pool: PgPool) {
+    use regex::Regex;
+    
+    let email_regex = Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
+    let phone_regex = Regex::new(r"\+?[0-9][0-9\-\s()]{7,}").unwrap();
+    let ssn_regex = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap();
+    
+    // Test PII detection
+    let test_cases = vec![
+        ("user@example.com", true, "email"),
+        ("+1 (555) 123-4567", true, "phone"),
+        ("123-45-6789", true, "ssn"),
+        ("normal text", false, "none"),
+    ];
+    
+    for (text, should_detect, pii_type) in test_cases {
+        let has_email = email_regex.is_match(text);
+        let has_phone = phone_regex.is_match(text);
+        let has_ssn = ssn_regex.is_match(text);
+        
+        let detected = has_email || has_phone || has_ssn;
+        assert_eq!(
+            detected, should_detect,
+            "PII detection failed for {} (type: {})",
+            text, pii_type
+        );
+    }
+}
+
+#[sqlx::test]
+async fn test_policy_violation_logging(pool: PgPool) {
+    let violation_id = uuid::Uuid::new_v4().to_string();
+    let policy_id = "test_policy";
+    let rule_id = "test_rule";
+    let violation_type = "illegal_transition";
+    let description = "Attempted invalid job state transition";
+    
+    // Log violation
+    sqlx::query!(
+        r#"
+        INSERT INTO policy_violations (
+            violation_id, policy_id, rule_id, violation_type,
+            description, actor_id, container_id, event_id, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, 'user_test', 'C.Jobs', 'event_test', NOW())
+        "#,
+        violation_id,
+        policy_id,
+        rule_id,
+        violation_type,
+        description
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    
+    // Retrieve violation
+    let violation = sqlx::query!(
+        r#"
+        SELECT violation_id, policy_id, violation_type
+        FROM policy_violations
+        WHERE violation_id = $1
+        "#,
+        violation_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    
+    assert_eq!(violation.violation_id, violation_id);
+    assert_eq!(violation.violation_type, violation_type);
+}

@@ -1,0 +1,73 @@
+name: "Database Failure Experiment"
+description: "Simulate PostgreSQL unavailability"
+
+hypothesis: |
+  When the database becomes unavailable, UBL Kernel should: 
+  1. Reject new writes gracefully
+  2. Continue serving reads from cache (if available)
+  3. Recover automatically when database returns
+
+steady_state:
+  - service: postgres
+    metric: health_check
+    expected: healthy
+  - service: ubl-kernel
+    metric: health_check
+    expected:  healthy
+  - metric: ledger_append_success_rate
+    expected:  >99%
+
+experiment:
+  - name:  "Stop PostgreSQL"
+    type: service
+    action: stop
+    target: postgres
+    
+  - name: "Attempt Operations"
+    type: load_test
+    duration: 30s
+    operations:
+      - type: message_send
+        rate: 10/s
+      - type: timeline_query
+        rate: 20/s
+    
+  - name: "Monitor Graceful Degradation"
+    type: observe
+    duration: 30s
+    metrics:
+      - ubl_connection_pool_errors
+      - ubl_write_errors
+      - ubl_read_cache_hits
+    
+  - name: "Restart PostgreSQL"
+    type: service
+    action: start
+    target: postgres
+    
+  - name: "Wait for Recovery"
+    type: wait
+    duration: 30s
+    
+  - name: "Verify Full Recovery"
+    type: validate
+    checks:
+      - service:  postgres
+        metric: health_check
+        expected: healthy
+      - service: ubl-kernel
+        metric: health_check
+        expected: healthy
+      - metric:  ledger_append_success_rate
+        expected: >99%
+        after: 60s
+
+success_criteria:
+  - graceful_error_responses: true
+  - no_panic_or_crash: true
+  - recovery_time: <2m
+  - no_data_corruption: true
+
+rollback:
+  - action:  start_postgres
+  - action: verify_data_integrity
