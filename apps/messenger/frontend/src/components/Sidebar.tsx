@@ -151,6 +151,13 @@ const Sidebar: React.FC<SidebarProps> = ({
             isAgent = otherEntity?.type === 'agent';
           }
 
+          // Get presence status for non-group conversations
+          const otherParticipantId = !conv.isGroup ? conv.participants.find(p => p !== currentUser.id) : null;
+          const otherEntity = otherParticipantId ? entities.find(e => e.id === otherParticipantId) : null;
+          const presenceStatus = otherEntity?.status || 'offline';
+          const isWorking = presenceStatus === 'working';
+          const isWaitingOnYou = presenceStatus === 'waiting_on_you';
+
           return (
             <div 
               key={conv.id}
@@ -180,6 +187,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <Icons.Agent />
                 )}
                 
+                {/* Presence Indicator */}
+                {!conv.isGroup && otherEntity && (
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 border-2 border-bg-elevated rounded-full shadow-sm ${getStatusColor(presenceStatus)}`} 
+                       title={`${otherEntity.name}: ${presenceStatus}`} />
+                )}
+                
                 {/* Unread Badge */}
                 {conv.unreadCount && conv.unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-accent rounded-full text-[10px] font-bold text-bg-base flex items-center justify-center shadow-md">
@@ -198,9 +211,21 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {conv.lastMessageTime || ''}
                   </span>
                 </div>
-                <p className={`text-[13px] truncate ${conv.unreadCount ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
+                <div className="flex items-center gap-2">
+                  <p className={`text-[13px] truncate flex-1 ${conv.unreadCount ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
                   {conv.lastMessage || 'No messages yet'}
                 </p>
+                  {isWaitingOnYou && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-warning/20 text-warning rounded font-bold uppercase tracking-wide flex-shrink-0">
+                      Needs You
+                    </span>
+                  )}
+                  {isWorking && otherEntity && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-info/20 text-info rounded font-bold uppercase tracking-wide flex-shrink-0">
+                      Working
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );

@@ -44,6 +44,8 @@ mod policy_registry;
 mod console_v1;
 mod registry_v1;
 mod messenger_v1;
+mod messenger_gateway;
+mod policy;
 mod crypto;
 mod webauthn_store;
 mod keystore;
@@ -259,7 +261,47 @@ async fn route_commit(
         .and_then(|s| auth::extract_sid_from_header(s).ok())
         .unwrap_or_else(|| "anonymous".to_string());
 
-    // Evaluate policy
+    // Apply Policy Pack v1 checks
+    if let Some(ref atom) = link.atom {
+        let policy_engine = policy::PolicyEngine::new(state.pool.clone());
+        
+        // Check for raw PII
+        if let Err(e) = policy_engine.check_no_raw_pii(atom) {
+            error!("❌ Policy violation: {}", e);
+            return Err((StatusCode::FORBIDDEN, format!("PolicyViolation: {}", e)));
+        }
+
+        // Check job FSM if this is a job state change
+        if let Some(event_type) = atom.get("type").and_then(|t| t.as_str()) {
+            if event_type == "job.state_changed" {
+                if let (Some(from), Some(to), Some(job_id)) = (
+                    atom.get("from_state").and_then(|v| v.as_str()),
+                    atom.get("to_state").and_then(|v| v.as_str()),
+                    atom.get("job_id").and_then(|v| v.as_str()),
+                ) {
+                    if let Err(e) = policy_engine.validate_job_fsm(job_id, from, to).await {
+                        error!("❌ Policy violation: {}", e);
+                        return Err((StatusCode::FORBIDDEN, format!("PolicyViolation: {}", e)));
+                    }
+                }
+            }
+
+            // Check tool pairing
+            if event_type == "tool.result" {
+                if let Some(tool_call_id) = atom.get("payload")
+                    .and_then(|p| p.get("tool_call_id"))
+                    .and_then(|v| v.as_str())
+                {
+                    if let Err(e) = policy_engine.validate_tool_pairing(tool_call_id, event_type).await {
+                        error!("❌ Policy violation: {}", e);
+                        return Err((StatusCode::FORBIDDEN, format!("PolicyViolation: {}", e)));
+                    }
+                }
+            }
+        }
+    }
+
+    // Evaluate policy via registry
     let policy_decision = state.policy_registry.evaluate(
         &link.container_id,
         &actor,
@@ -338,15 +380,74 @@ async fn route_commit(
                     
                     // Process projection in background (non-blocking)
                     tokio::spawn(async move {
+                        let tenant_id = "default"; // TODO: Extract from atom or session
+                        
                         if container_id == "C.Jobs" {
-                            let projection = projections::JobsProjection::new(pool);
+                            // Update main jobs projection
+                            let projection = projections::JobsProjection::new(pool.clone());
                             if let Err(e) = projection.process_event(event_type, &atom, &entry_hash, sequence).await {
                                 error!("Failed to update jobs projection: {}", e);
                             }
+                            
+                            // Update new projection tables
+                            let job_events = projections::JobEventsProjection::new(pool.clone());
+                            if let Err(e) = job_events.process_event(event_type, &atom, &entry_hash, sequence, tenant_id).await {
+                                error!("Failed to update job events projection: {}", e);
+                            }
+                            
+                            // Update artifacts if tool.result
+                            if event_type == "tool.result" {
+                                let artifacts = projections::ArtifactsProjection::new(pool.clone());
+                                if let Err(e) = artifacts.process_event(&atom, &entry_hash, tenant_id).await {
+                                    error!("Failed to update artifacts projection: {}", e);
+                                }
+                            }
+                            
+                            // Update presence based on job state changes
+                            if event_type == "job.state_changed" || event_type == "job.started" || event_type == "job.completed" {
+                                let presence = projections::PresenceProjection::new(pool.clone());
+                                let job_id = atom.get("job_id").or_else(|| atom.get("id")).and_then(|v| v.as_str());
+                                let owner = atom.get("owner_entity_id").or_else(|| atom.get("assigned_to")).and_then(|v| v.as_str());
+                                let state = atom.get("to_state").or_else(|| atom.get("state")).and_then(|v| v.as_str());
+                                let waiting_on = atom.get("waiting_on").and_then(|v| v.as_array())
+                                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
+                                
+                                if let Some(entity_id) = owner {
+                                    if let Err(e) = presence.recompute_from_job(tenant_id, entity_id, job_id, state, waiting_on).await {
+                                        error!("Failed to update presence: {}", e);
+                                    }
+                                }
+                            }
+                            
+                            // Update activity for any event
+                            if let Some(actor) = atom.get("actor").and_then(|a| a.get("entity_id")).and_then(|v| v.as_str())
+                                .or_else(|| atom.get("from").and_then(|v| v.as_str()))
+                                .or_else(|| atom.get("created_by").and_then(|v| v.as_str()))
+                            {
+                                let presence = projections::PresenceProjection::new(pool.clone());
+                                let _ = presence.update_activity(tenant_id, actor, &entry_hash).await;
+                            }
                         } else if container_id == "C.Messenger" {
-                            let projection = projections::MessagesProjection::new(pool);
+                            let projection = projections::MessagesProjection::new(pool.clone());
                             if let Err(e) = projection.process_event(event_type, &atom, &entry_hash, sequence).await {
                                 error!("Failed to update messages projection: {}", e);
+                            }
+                            
+                            // Update timeline
+                            let timeline = projections::TimelineProjection::new(pool.clone());
+                            let conversation_id = atom.get("conversation_id").and_then(|v| v.as_str()).unwrap_or_default();
+                            if !conversation_id.is_empty() {
+                                let item_type = if event_type == "message.created" { "message" } else { "system" };
+                                let item_data = atom.clone();
+                                if let Err(e) = timeline.add_item(tenant_id, conversation_id, item_type, &item_data, sequence).await {
+                                    error!("Failed to update timeline: {}", e);
+                                }
+                            }
+                            
+                            // Update activity for message sender
+                            if let Some(from) = atom.get("from").and_then(|v| v.as_str()) {
+                                let presence = projections::PresenceProjection::new(pool.clone());
+                                let _ = presence.update_activity(tenant_id, from, &entry_hash).await;
                             }
                         } else if container_id == "C.Office" {
                             let projection = projections::OfficeProjection::new(pool);
@@ -553,6 +654,11 @@ async fn main() -> anyhow::Result<()> {
         .merge(registry_v1::routes(pool.clone()))
         // Messenger v1 (C.Messenger boundary)
         .merge(messenger_v1::routes(pool.clone()))
+        // Messenger Gateway v1
+        .merge(messenger_gateway::routes(
+            pool.clone(),
+            std::env::var("OFFICE_URL").unwrap_or_else(|_| "http://localhost:8081".to_string())
+        ))
         .layer(cors);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());

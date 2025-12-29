@@ -13,12 +13,20 @@ mod messages;
 mod office;
 mod rebuild;
 pub mod routes;
+mod job_events;
+mod artifacts;
+mod presence;
+mod timeline;
 
 pub use jobs::JobsProjection;
 pub use messages::MessagesProjection;
 pub use office::OfficeProjection;
 pub use rebuild::rebuild_projections;
 pub use routes::{projection_router, ProjectionState};
+pub use job_events::JobEventsProjection;
+pub use artifacts::ArtifactsProjection;
+pub use presence::PresenceProjection;
+pub use timeline::TimelineProjection;
 
 use serde::{Deserialize, Serialize};
 

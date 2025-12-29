@@ -77,7 +77,7 @@ pub struct BootstrapResponse {
     pub messages: Vec<MessageInfo>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct UserInfo {
     pub sid: String,
     pub display_name: String,
@@ -470,7 +470,7 @@ async fn list_entities(
 // HELPERS
 // ============================================================================
 
-async fn get_user_from_session(pool: &PgPool, headers: &HeaderMap) -> Option<UserInfo> {
+pub async fn get_user_from_session(pool: &PgPool, headers: &HeaderMap) -> Option<UserInfo> {
     // Extract token from Authorization header or cookie
     let token = headers.get("authorization")
         .and_then(|h| h.to_str().ok())
@@ -571,7 +571,7 @@ async fn get_conversation_messages(pool: &PgPool, conversation_id: &str, limit: 
     Ok(result)
 }
 
-async fn store_message_content(pool: &PgPool, message_id: &str, content: &str, content_hash: &str) -> Result<(), sqlx::Error> {
+pub async fn store_message_content(pool: &PgPool, message_id: &str, content: &str, content_hash: &str) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO message_content (message_id, content, content_hash, created_at)
@@ -599,12 +599,12 @@ async fn get_message_content(pool: &PgPool, message_id: &str) -> Result<String, 
     Ok(content.unwrap_or_default())
 }
 
-fn blake3_hex(data: &str) -> String {
+pub fn blake3_hex(data: &str) -> String {
     let hash = blake3::hash(data.as_bytes());
     hash.to_hex().to_string()
 }
 
-fn blake3_hex_bytes(data: &[u8]) -> String {
+pub fn blake3_hex_bytes(data: &[u8]) -> String {
     let hash = blake3::hash(data);
     hash.to_hex().to_string()
 }

@@ -8,14 +8,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useAuthContext } from '../context/AuthContext';
-import { Sidebar } from '../components/Sidebar';
-import { ChatView } from '../components/ChatView';
-import { WelcomeScreen } from '../components/WelcomeScreen';
+import Sidebar from '../components/Sidebar';
+import ChatView from '../components/ChatView';
+import WelcomeScreen from '../components/WelcomeScreen';
 import { NewWorkstreamModal, EntityProfileModal } from '../components/modals';
+import { JobDrawer } from '../components/JobDrawer';
 import { Entity, Conversation, Message } from '../types';
 import { INITIAL_ENTITIES, INITIAL_CONVERSATIONS, INITIAL_MESSAGES } from '../constants';
 import { ublApi } from '../services/ublApi';
 import { jobsApi } from '../services/jobsApi';
+import { useSSE } from '../hooks/useSSE';
 import toast from 'react-hot-toast';
 
 export const ChatPage: React.FC = () => {
@@ -70,7 +72,37 @@ export const ChatPage: React.FC = () => {
     loadData();
   }, [isDemoMode]);
 
-  // Subscribe to job updates
+  // Subscribe to SSE updates
+  useSSE('default', {
+    'timeline.append': (event) => {
+      const { conversation_id, item } = event.data;
+      if (conversation_id === conversationId) {
+        // Add new message/card to timeline
+        if (item.item_type === 'message') {
+          setMessages(prev => [...prev, item.item_data as Message]);
+        }
+      }
+    },
+    'job.update': (event) => {
+      const { job_id, update } = event.data;
+      console.log('[SSE] Job update:', job_id, update);
+      // Update job state in UI
+    },
+    'presence.update': (event) => {
+      const { entity_id, state } = event.data;
+      setEntities(prev => prev.map(e => 
+        e.id === entity_id ? { ...e, status: state as any } : e
+      ));
+    },
+    'conversation.update': (event) => {
+      const { conversation_id, update } = event.data;
+      setConversations(prev => prev.map(c =>
+        c.id === conversation_id ? { ...c, ...update } : c
+      ));
+    },
+  });
+
+  // Subscribe to job updates (WebSocket)
   useEffect(() => {
     if (isDemoMode) return;
 
@@ -309,6 +341,16 @@ export const ChatPage: React.FC = () => {
               onSelectConv={handleSelectConversation}
               entities={entities}
               currentUser={currentUser}
+              onToggleStatus={() => {
+                // Toggle user status (demo only)
+                const statuses = ['online', 'away', 'busy', 'offline'] as const;
+                const currentIdx = statuses.indexOf(currentUser.status as any || 'online');
+                const nextStatus = statuses[(currentIdx + 1) % statuses.length];
+                setEntities(prev => prev.map(e => 
+                  e.id === currentUser.id ? { ...e, status: nextStatus } : e
+                ));
+              }}
+              onInspectEntity={handleInspectEntity}
               onNewEntity={handleNewConversation}
               onLogout={handleLogout}
             />
@@ -334,6 +376,8 @@ export const ChatPage: React.FC = () => {
             currentUser={currentUser}
             onSendMessage={handleSendMessage}
             onBack={() => navigate('/')}
+            onInspectEntity={handleInspectEntity}
+            onViewJobDetails={(jobId) => setOpenJobId(jobId)}
             isTyping={isTyping}
           />
         ) : (

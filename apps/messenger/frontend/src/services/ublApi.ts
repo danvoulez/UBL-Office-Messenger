@@ -1,6 +1,6 @@
 /**
  * UBL API Service
- * Communicates with UBL Kernel's Messenger Boundary (messenger_v1)
+ * Communicates with UBL Kernel's Messenger Gateway (v1) and Messenger Boundary (messenger_v1)
  */
 
 import { api } from './apiClient';
@@ -266,6 +266,131 @@ export const ublApi = {
     // TODO: Implement when settings endpoint exists
     console.log('Settings update:', patch);
     return this.getSettings();
+  },
+
+  // ============================================================================
+  // Gateway API (v1)
+  // ============================================================================
+
+  /**
+   * Send message via Gateway
+   * Endpoint: POST /v1/conversations/:id/messages
+   */
+  async sendMessageViaGateway(input: {
+    conversationId: string;
+    content: string;
+    messageType?: MessageType;
+    idempotencyKey?: string;
+  }): Promise<{ messageId: string; hash: string; sequence: number; action: string }> {
+    const res = await api.post<{
+      message_id: string;
+      hash: string;
+      sequence: number;
+      action: string;
+    }>(`/v1/conversations/${input.conversationId}/messages`, {
+      content: input.content,
+      message_type: input.messageType || 'text',
+      idempotency_key: input.idempotencyKey,
+    });
+    return {
+      messageId: res.message_id,
+      hash: res.hash,
+      sequence: res.sequence,
+      action: res.action,
+    };
+  },
+
+  /**
+   * Handle job action via Gateway
+   * Endpoint: POST /v1/jobs/:id/actions
+   */
+  async jobActionViaGateway(input: {
+    jobId: string;
+    actionType: string;
+    buttonId: string;
+    cardId: string;
+    inputData?: any;
+    idempotencyKey?: string;
+  }): Promise<{ success: boolean; eventIds: string[] }> {
+    const res = await api.post<{
+      success: boolean;
+      event_ids: string[];
+    }>(`/v1/jobs/${input.jobId}/actions`, {
+      action_type: input.actionType,
+      button_id: input.buttonId,
+      card_id: input.cardId,
+      input_data: input.inputData,
+      idempotency_key: input.idempotencyKey,
+    });
+    return {
+      success: res.success,
+      eventIds: res.event_ids,
+    };
+  },
+
+  /**
+   * Get conversation timeline
+   * Endpoint: GET /v1/conversations/:id/timeline
+   */
+  async getTimeline(input: {
+    conversationId: string;
+    tenantId?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ items: any[]; cursor: string }> {
+    const params = new URLSearchParams();
+    if (input.tenantId) params.set('tenant_id', input.tenantId);
+    if (input.cursor) params.set('cursor', input.cursor);
+    if (input.limit) params.set('limit', input.limit.toString());
+
+    const res = await api.get<{
+      items: any[];
+      cursor: string;
+    }>(`/v1/conversations/${input.conversationId}/timeline?${params.toString()}`);
+    return res;
+  },
+
+  /**
+   * Get job details for drawer
+   * Endpoint: GET /v1/jobs/:id
+   */
+  async getJob(input: {
+    jobId: string;
+    tenantId?: string;
+  }): Promise<{
+    jobId: string;
+    title: string;
+    goal: string;
+    state: string;
+    owner: any;
+    availableActions: any[];
+    timeline: any[];
+    artifacts: any[];
+  }> {
+    const params = new URLSearchParams();
+    if (input.tenantId) params.set('tenant_id', input.tenantId);
+
+    const res = await api.get<{
+      job_id: string;
+      title: string;
+      goal: string;
+      state: string;
+      owner: any;
+      available_actions: any[];
+      timeline: any[];
+      artifacts: any[];
+    }>(`/v1/jobs/${input.jobId}?${params.toString()}`);
+    
+    return {
+      jobId: res.job_id,
+      title: res.title,
+      goal: res.goal,
+      state: res.state,
+      owner: res.owner,
+      availableActions: res.available_actions,
+      timeline: res.timeline,
+      artifacts: res.artifacts,
+    };
   },
 };
 

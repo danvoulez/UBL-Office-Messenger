@@ -141,8 +141,11 @@ impl JobsProjection {
     ) -> Result<(), sqlx::Error> {
         let job_id = atom["job_id"].as_str().unwrap_or_default();
         let started_at = atom["started_at"].as_str().unwrap_or_default();
+        let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
+        let now = time::OffsetDateTime::now_utc();
 
-        sqlx::query!(
+        // Update old table
+        let _ = sqlx::query!(
             r#"
             UPDATE projection_jobs
             SET status = 'running', started_at = $2::timestamptz,
@@ -155,7 +158,24 @@ impl JobsProjection {
             sequence
         )
         .execute(&self.pool)
-        .await?;
+        .await;
+
+        // Update new table
+        let _ = sqlx::query!(
+            r#"
+            UPDATE projection_jobs
+            SET state = 'in_progress', updated_at = $2, last_activity_at = $2,
+                last_event_hash = $3, last_event_seq = $4
+            WHERE tenant_id = $5 AND job_id = $1
+            "#,
+            job_id,
+            now,
+            entry_hash,
+            sequence,
+            tenant_id
+        )
+        .execute(&self.pool)
+        .await;
 
         info!("🚀 Job started: {}", job_id);
         Ok(())
@@ -201,8 +221,11 @@ impl JobsProjection {
         let completed_at = atom["completed_at"].as_str().unwrap_or_default();
         let summary = atom["result"]["summary"].as_str();
         let artifacts = atom["result"]["artifacts"].clone();
+        let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
+        let now = time::OffsetDateTime::now_utc();
 
-        sqlx::query!(
+        // Update old table
+        let _ = sqlx::query!(
             r#"
             UPDATE projection_jobs
             SET status = 'completed', completed_at = $2::timestamptz,
@@ -218,7 +241,24 @@ impl JobsProjection {
             sequence
         )
         .execute(&self.pool)
-        .await?;
+        .await;
+
+        // Update new table
+        let _ = sqlx::query!(
+            r#"
+            UPDATE projection_jobs
+            SET state = 'completed', updated_at = $2, last_activity_at = $2,
+                last_event_hash = $3, last_event_seq = $4
+            WHERE tenant_id = $5 AND job_id = $1
+            "#,
+            job_id,
+            now,
+            entry_hash,
+            sequence,
+            tenant_id
+        )
+        .execute(&self.pool)
+        .await;
 
         info!("✅ Job completed: {}", job_id);
         Ok(())
@@ -232,8 +272,11 @@ impl JobsProjection {
     ) -> Result<(), sqlx::Error> {
         let job_id = atom["job_id"].as_str().unwrap_or_default();
         let cancelled_at = atom["cancelled_at"].as_str().unwrap_or_default();
+        let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
+        let now = time::OffsetDateTime::now_utc();
 
-        sqlx::query!(
+        // Update old table
+        let _ = sqlx::query!(
             r#"
             UPDATE projection_jobs
             SET status = 'cancelled', cancelled_at = $2::timestamptz,
@@ -246,7 +289,24 @@ impl JobsProjection {
             sequence
         )
         .execute(&self.pool)
-        .await?;
+        .await;
+
+        // Update new table
+        let _ = sqlx::query!(
+            r#"
+            UPDATE projection_jobs
+            SET state = 'cancelled', updated_at = $2, last_activity_at = $2,
+                last_event_hash = $3, last_event_seq = $4
+            WHERE tenant_id = $5 AND job_id = $1
+            "#,
+            job_id,
+            now,
+            entry_hash,
+            sequence,
+            tenant_id
+        )
+        .execute(&self.pool)
+        .await;
 
         info!("🚫 Job cancelled: {}", job_id);
         Ok(())

@@ -1,12 +1,11 @@
 /**
  * New Workstream Modal
- * Beautiful modal for creating new conversations/workstreams
+ * Create new conversation / workstream
  */
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Users, User, Sparkles } from 'lucide-react';
-import { Button, Input } from '../ui';
+import { X, Plus, Users, User } from 'lucide-react';
 import { Entity } from '../../types';
 
 interface NewWorkstreamModalProps {
@@ -24,183 +23,187 @@ export const NewWorkstreamModal: React.FC<NewWorkstreamModalProps> = ({
   entities,
   currentUserId,
 }) => {
-  const [name, setName] = useState('');
+  const [mode, setMode] = useState<'select' | 'group'>('select');
+  const [groupName, setGroupName] = useState('');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
-  const [mode, setMode] = useState<'direct' | 'group'>('direct');
 
   const availableEntities = entities.filter(e => e.id !== currentUserId);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (mode === 'direct' && selectedParticipants.length === 1) {
+  const handleSelectEntity = (entityId: string) => {
+    if (mode === 'select') {
+      // Direct conversation
       onSubmit({
         name: '',
-        participants: [currentUserId, selectedParticipants[0]],
+        participants: [currentUserId, entityId],
         isGroup: false,
       });
-    } else if (mode === 'group' && name.trim()) {
-      onSubmit({
-        name: name.trim(),
-        participants: [currentUserId, ...selectedParticipants],
-        isGroup: true,
-      });
+      onClose();
+    } else {
+      // Toggle selection for group
+      setSelectedParticipants(prev => 
+        prev.includes(entityId) 
+          ? prev.filter(id => id !== entityId)
+          : [...prev, entityId]
+      );
     }
+  };
+
+  const handleCreateGroup = () => {
+    if (selectedParticipants.length < 2 || !groupName.trim()) return;
+    
+    onSubmit({
+      name: groupName,
+      participants: [currentUserId, ...selectedParticipants],
+      isGroup: true,
+    });
     
     // Reset
-    setName('');
+    setGroupName('');
+    setSelectedParticipants([]);
+    setMode('select');
+    onClose();
+  };
+
+  const handleClose = () => {
+    setMode('select');
+    setGroupName('');
     setSelectedParticipants([]);
     onClose();
   };
 
-  const toggleParticipant = (id: string) => {
-    setSelectedParticipants(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    );
-  };
-
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          onClick={e => e.stopPropagation()}
-          className="w-full max-w-md bg-bg-elevated border border-border-default rounded-3xl shadow-2xl overflow-hidden"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-border-subtle">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-accent" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black text-text-primary">New Workstream</h2>
-                <p className="text-xs text-text-tertiary">Start a conversation</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-surface transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            onClick={handleClose}
+          />
 
-          {/* Mode Selector */}
-          <div className="p-4 border-b border-border-subtle">
-            <div className="flex gap-2 p-1 bg-bg-surface rounded-xl">
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="fixed inset-x-4 top-[10%] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md bg-bg-elevated border border-border-default rounded-2xl shadow-2xl z-50 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
+              <h2 className="text-lg font-bold text-text-primary">
+                {mode === 'select' ? 'New Workstream' : 'Create Group'}
+              </h2>
               <button
-                onClick={() => setMode('direct')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
-                  mode === 'direct'
-                    ? 'bg-accent text-text-inverse shadow-glow-sm'
-                    : 'text-text-tertiary hover:text-text-primary'
+                onClick={handleClose}
+                className="w-8 h-8 flex items-center justify-center text-text-tertiary hover:bg-bg-hover rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mode Toggle */}
+            <div className="flex gap-2 px-5 pt-4">
+              <button
+                onClick={() => setMode('select')}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
+                  mode === 'select'
+                    ? 'bg-accent text-bg-base'
+                    : 'bg-bg-surface text-text-secondary hover:bg-bg-hover'
                 }`}
               >
-                <User className="w-4 h-4" />
+                <User className="w-4 h-4 inline-block mr-2" />
                 Direct
               </button>
               <button
                 onClick={() => setMode('group')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
                   mode === 'group'
-                    ? 'bg-accent text-text-inverse shadow-glow-sm'
-                    : 'text-text-tertiary hover:text-text-primary'
+                    ? 'bg-accent text-bg-base'
+                    : 'bg-bg-surface text-text-secondary hover:bg-bg-hover'
                 }`}
               >
-                <Users className="w-4 h-4" />
+                <Users className="w-4 h-4 inline-block mr-2" />
                 Group
               </button>
             </div>
-          </div>
 
-          <form onSubmit={handleSubmit}>
-            {/* Group Name (only for group mode) */}
+            {/* Group Name Input */}
             {mode === 'group' && (
-              <div className="p-4 border-b border-border-subtle">
-                <Input
-                  label="Workstream Name"
-                  placeholder="e.g., Strategic Board"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
+              <div className="px-5 pt-4">
+                <input
+                  type="text"
+                  placeholder="Group name..."
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="w-full px-4 py-3 bg-bg-surface border border-border-default rounded-xl text-text-primary placeholder-text-tertiary outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
                 />
               </div>
             )}
 
-            {/* Participants */}
-            <div className="p-4 max-h-64 overflow-y-auto">
-              <label className="block text-xxs font-black text-text-tertiary uppercase tracking-widest mb-3">
-                {mode === 'direct' ? 'Select Contact' : 'Add Participants'}
-              </label>
+            {/* Entity List */}
+            <div className="px-5 py-4 max-h-[300px] overflow-y-auto custom-scrollbar">
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-3">
+                {mode === 'select' ? 'Select Entity' : 'Add Participants'}
+              </p>
               
               <div className="space-y-2">
-                {availableEntities.map(entity => (
-                  <button
-                    key={entity.id}
-                    type="button"
-                    onClick={() => {
-                      if (mode === 'direct') {
-                        setSelectedParticipants([entity.id]);
-                      } else {
-                        toggleParticipant(entity.id);
-                      }
-                    }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      selectedParticipants.includes(entity.id)
-                        ? 'border-accent bg-accent/10'
-                        : 'border-border-subtle hover:border-border-default bg-bg-surface'
-                    }`}
-                  >
-                    <img
-                      src={entity.avatar}
-                      alt={entity.name}
-                      className="w-10 h-10 rounded-full"
-                    />
-                    <div className="flex-1 text-left">
-                      <div className="text-sm font-bold text-text-primary">{entity.name}</div>
-                      <div className="text-xs text-text-tertiary capitalize">{entity.type}</div>
-                    </div>
-                    {selectedParticipants.includes(entity.id) && (
-                      <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                        <svg className="w-4 h-4 text-text-inverse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                {availableEntities.map(entity => {
+                  const isSelected = selectedParticipants.includes(entity.id);
+                  
+                  return (
+                    <button
+                      key={entity.id}
+                      onClick={() => handleSelectEntity(entity.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        isSelected
+                          ? 'bg-accent/10 border-2 border-accent'
+                          : 'bg-bg-surface border-2 border-transparent hover:bg-bg-hover'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden ${
+                        entity.type === 'agent' ? 'bg-accent/10 text-accent' : 'bg-bg-hover'
+                      }`}>
+                        {entity.avatar ? (
+                          <img src={entity.avatar} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-5 h-5" />
+                        )}
                       </div>
-                    )}
-                  </button>
-                ))}
+                      <div className="flex-1 text-left">
+                        <div className="text-sm font-semibold text-text-primary">{entity.name}</div>
+                        <div className="text-[11px] text-text-tertiary capitalize">
+                          {entity.type} • {entity.role || 'Entity'}
+                        </div>
+                      </div>
+                      {mode === 'group' && isSelected && (
+                        <div className="w-6 h-6 rounded-full bg-accent text-bg-base flex items-center justify-center">
+                          <Plus className="w-4 h-4 rotate-45" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-border-subtle bg-bg-surface/50">
-              <Button
-                type="submit"
-                disabled={
-                  (mode === 'direct' && selectedParticipants.length !== 1) ||
-                  (mode === 'group' && (!name.trim() || selectedParticipants.length === 0))
-                }
-                className="w-full"
-              >
-                Create Workstream
-              </Button>
-            </div>
-          </form>
-        </motion.div>
-      </motion.div>
+            {/* Footer (Group mode only) */}
+            {mode === 'group' && (
+              <div className="px-5 py-4 border-t border-border-subtle">
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={selectedParticipants.length < 2 || !groupName.trim()}
+                  className="w-full py-3 bg-accent hover:bg-accent-hover disabled:bg-bg-surface disabled:text-text-tertiary text-bg-base font-bold uppercase tracking-widest text-[11px] rounded-xl transition-all"
+                >
+                  Create Group ({selectedParticipants.length} selected)
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
     </AnimatePresence>
   );
 };
-
-export default NewWorkstreamModal;
-

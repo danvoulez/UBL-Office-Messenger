@@ -75,7 +75,7 @@
   }
 
   .btn-secondary {
-    @apply bg-bg-surface text-text-secondary border-border-default;
+    @apply bg-bg-surface text-text-secondary border-border;
     @apply hover:bg-bg-hover hover:text-text-primary;
   }
 
@@ -104,7 +104,7 @@
   /* Input Base */
   .input {
     @apply w-full bg-bg-surface text-text-primary;
-    @apply border border-border-default rounded-xl;
+    @apply border border-border rounded-xl;
     @apply px-4 py-3 text-sm;
     @apply placeholder:text-text-tertiary;
     @apply transition-all duration-150;
@@ -117,7 +117,7 @@
 
   /* Card */
   .card {
-    @apply bg-bg-surface border border-border-default rounded-2xl;
+    @apply bg-bg-surface border border-border rounded-2xl;
     @apply overflow-hidden;
   }
 
@@ -129,7 +129,7 @@
   .avatar {
     @apply flex items-center justify-center;
     @apply rounded-xl overflow-hidden;
-    @apply border-2 border-border-default bg-bg-surface;
+    @apply border-2 border-border bg-bg-surface;
     @apply flex-shrink-0;
   }
 
@@ -200,7 +200,7 @@
   }
 
   .modal-content {
-    @apply bg-bg-elevated rounded-3xl border border-border-default;
+    @apply bg-bg-elevated rounded-3xl border border-border;
     @apply shadow-2xl overflow-hidden;
     @apply animate-slide-up;
   }
@@ -209,7 +209,7 @@
   .toast {
     @apply flex items-center gap-3;
     @apply px-4 py-3 rounded-xl;
-    @apply bg-bg-elevated border border-border-default;
+    @apply bg-bg-elevated border border-border;
     @apply shadow-lg;
     @apply text-sm font-medium;
   }

@@ -14,7 +14,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tower_http::cors::{CorsLayer, Any};
-use tracing::info;
+use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::entity::{Entity, EntityId, EntityParams, EntityType, Instance, EntityRepository};
 use crate::session::{Session, SessionType, SessionMode, SessionConfig};
@@ -131,6 +132,10 @@ pub fn create_router(state: SharedState) -> Router {
         // Affordances
         .route("/affordances", get(list_affordances))
         .route("/affordances/:id", get(get_affordance))
+
+        // Gateway-facing endpoints
+        .route("/v1/office/ingest_message", post(ingest_message))
+        .route("/v1/office/job_action", post(handle_job_action))
 
         .layer(cors)
         .with_state(state)
@@ -704,6 +709,210 @@ async fn submit_approval(
     info!("Approval decision submitted: {} - {}", approval_id, decision.decision);
 
     Ok((StatusCode::OK, Json(decision)))
+}
+
+// ============ Gateway-facing Endpoints ============
+
+#[derive(Debug, Deserialize)]
+struct IngestMessageRequest {
+    conversation_id: String,
+    message_id: String,
+    from: String,
+    content: String,
+    tenant_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct IngestMessageResponse {
+    action: MessageAction,
+    reply_content: Option<String>,
+    job_id: Option<String>,
+    card: Option<serde_json::Value>,
+    event_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum MessageAction {
+    Reply,
+    ProposeJob,
+    None,
+}
+
+/// POST /v1/office/ingest_message
+/// Receive message from Gateway, decide reply vs job proposal
+async fn ingest_message(
+    State(state): State<SharedState>,
+    Json(req): Json<IngestMessageRequest>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    info!("📨 Office: ingest_message conversation={} message={}", 
+          req.conversation_id, req.message_id);
+
+    // 1. Build conversation context from UBL
+    // TODO: Query UBL projections for conversation state
+    let conversation_context = crate::job_executor::conversation_context::ConversationContextBuilder::new(
+        req.conversation_id.clone()
+    )
+    .with_participants(vec![req.from.clone()])
+    .with_recent_messages(vec![crate::job_executor::types::Message {
+        id: req.message_id.clone(),
+        from: req.from.clone(),
+        content: req.content.clone(),
+        timestamp: Utc::now(),
+    }])
+    .build();
+
+    // 2. Use LLM to decide action
+    // For now, simple heuristic: if message contains action words, propose job
+    let action = if req.content.to_lowercase().contains("create") 
+        || req.content.to_lowercase().contains("schedule")
+        || req.content.to_lowercase().contains("send")
+        || req.content.to_lowercase().contains("organize") {
+        MessageAction::ProposeJob
+    } else {
+        MessageAction::Reply
+    };
+
+    match action {
+        MessageAction::ProposeJob => {
+            // 3. Create job proposal
+            let job_id = format!("job_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string());
+            
+            // 4. Generate FormalizeCard
+            let card = crate::job_executor::cards::FormalizeCard {
+                base: crate::job_executor::cards::CardBase {
+                    card_id: format!("card_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string()),
+                    job_id: job_id.clone(),
+                    version: "v1".to_string(),
+                    title: format!("Proposed: {}", req.content.chars().take(50).collect::<String>()),
+                    summary: Some(req.content.clone()),
+                    state: crate::job_executor::fsm::JobState::Proposed,
+                    created_at: Utc::now(),
+                    conversation_id: req.conversation_id.clone(),
+                    tenant_id: req.tenant_id.clone(),
+                    owner: crate::job_executor::cards::CardActor {
+                        entity_id: "ent_office".to_string(),
+                        display_name: "Office".to_string(),
+                        actor_type: crate::job_executor::cards::ActorType::Agent,
+                    },
+                    author: crate::job_executor::cards::CardActor {
+                        entity_id: "ent_office".to_string(),
+                        display_name: "Office".to_string(),
+                        actor_type: crate::job_executor::cards::ActorType::Agent,
+                    },
+                    buttons: crate::job_executor::cards::FormalizeCard::default_buttons(&job_id),
+                },
+                job: crate::job_executor::cards::JobDefinition {
+                    job_id: job_id.clone(),
+                    goal: req.content.clone(),
+                    description: Some(req.content.clone()),
+                    priority: Some(crate::job_executor::cards::Priority::Normal),
+                    due_at: None,
+                    inputs_needed: None,
+                    expected_outputs: None,
+                    constraints: None,
+                    sla_hint: None,
+                },
+                plan_hint: None,
+            };
+
+            // 5. Emit job.created event to UBL
+            // TODO: Actually commit to UBL via ubl_client
+            let event_ids = vec![format!("evt_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string())];
+
+            Ok(Json(IngestMessageResponse {
+                action: MessageAction::ProposeJob,
+                reply_content: None,
+                job_id: Some(job_id),
+                card: Some(serde_json::to_value(&card).unwrap()),
+                event_ids,
+            }))
+        }
+        MessageAction::Reply => {
+            // Generate simple reply
+            let reply = format!("I received your message: {}", req.content);
+            
+            // TODO: Emit message.sent event to UBL
+            let event_ids = vec![format!("evt_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string())];
+
+            Ok(Json(IngestMessageResponse {
+                action: MessageAction::Reply,
+                reply_content: Some(reply),
+                job_id: None,
+                card: None,
+                event_ids,
+            }))
+        }
+        MessageAction::None => {
+            Ok(Json(IngestMessageResponse {
+                action: MessageAction::None,
+                reply_content: None,
+                job_id: None,
+                card: None,
+                event_ids: vec![],
+            }))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct JobActionRequest {
+    job_id: String,
+    action_type: String,
+    button_id: String,
+    card_id: String,
+    input_data: Option<serde_json::Value>,
+    tenant_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JobActionResponse {
+    success: bool,
+    updated_card: Option<serde_json::Value>,
+    event_ids: Vec<String>,
+}
+
+/// POST /v1/office/job_action
+/// Handle job button actions (approve/reject/provide_input)
+async fn handle_job_action(
+    State(state): State<SharedState>,
+    Json(req): Json<JobActionRequest>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    info!("🔧 Office: job_action job={} action={}", req.job_id, req.action_type);
+
+    // 1. Validate card provenance (button exists in prior card)
+    // TODO: Query UBL for prior message.sent event with card.card_id
+    // For now, assume valid
+
+    // 2. Update job state via FSM
+    let mut fsm = crate::job_executor::fsm::JobStateTracker::with_state(
+        crate::job_executor::fsm::JobState::Proposed
+    );
+
+    let transition_result = match req.action_type.as_str() {
+        "approve" => fsm.approve(),
+        "reject" => fsm.reject(),
+        "provide_input" => fsm.resume(),
+        _ => Err(crate::OfficeError::JobTransitionError("Unknown action".to_string())),
+    };
+
+    match transition_result {
+        Ok(_) => {
+            // 3. Emit events to UBL
+            // TODO: Actually commit to UBL
+            let event_ids = vec![format!("evt_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string())];
+
+            Ok(Json(JobActionResponse {
+                success: true,
+                updated_card: None, // TODO: Generate updated card
+                event_ids,
+            }))
+        }
+        Err(e) => {
+            error!("Job action failed: {}", e);
+            Err(ApiError::BadRequest(e.to_string()))
+        }
+    }
 }
 
 // ============ Error Handling ============

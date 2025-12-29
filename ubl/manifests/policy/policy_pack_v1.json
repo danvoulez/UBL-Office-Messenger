@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "name": "Policy Pack v1",
+  "description": "Shared governance vocabulary for UBL + Office + Messenger Gateway",
+  "policies": [
+    {
+      "id": "policy.envelope_required_fields",
+      "name": "Envelope Required Fields",
+      "description": "Validates that event envelope contains all required fields",
+      "container": "*",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "require_fields",
+          "fields": ["type", "created_at", "tenant_id"]
+        }
+      ]
+    },
+    {
+      "id": "policy.tenant_isolation",
+      "name": "Tenant Isolation",
+      "description": "Enforces tenant scope - events cannot cross tenant boundaries",
+      "container": "*",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "tenant_isolation",
+          "strict": true
+        }
+      ]
+    },
+    {
+      "id": "policy.job_fsm",
+      "name": "Job State Machine",
+      "description": "Validates job state transitions follow FSM rules",
+      "container": "C.Jobs",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "job_fsm",
+          "allowed_transitions": {
+            "draft": ["proposed"],
+            "proposed": ["approved", "rejected"],
+            "approved": ["in_progress"],
+            "in_progress": ["waiting_input", "completed", "failed", "cancelled"],
+            "waiting_input": ["in_progress", "cancelled", "failed"],
+            "completed": [],
+            "rejected": [],
+            "cancelled": [],
+            "failed": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "policy.card_provenance",
+      "name": "Card Provenance",
+      "description": "Validates button authenticity - button must exist in prior card",
+      "container": "C.Jobs",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "card_provenance",
+          "require_prior_card": true,
+          "validate_button_id": true
+        }
+      ]
+    },
+    {
+      "id": "policy.no_raw_pii",
+      "name": "No Raw PII",
+      "description": "Rejects raw PII in events - must use hash/redaction",
+      "container": "*",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "no_raw_pii",
+          "patterns": ["email", "phone", "ssn", "credit_card"],
+          "action": "reject"
+        }
+      ]
+    },
+    {
+      "id": "policy.tool_pairing",
+      "name": "Tool Pairing",
+      "description": "Requires tool.called before tool.result",
+      "container": "C.Jobs",
+      "enabled": true,
+      "rules": [
+        {
+          "type": "tool_pairing",
+          "require_called_before_result": true
+        }
+      ]
+    }
+  ]
+}
+

@@ -56,6 +56,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 uuid = { workspace = true }
 url = "2.5"
 dotenvy = "0.15"
+regex = "1"
 
 # Metrics
 prometheus = "0.13"

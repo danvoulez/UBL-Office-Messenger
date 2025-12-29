@@ -16,6 +16,7 @@ interface ChatViewProps {
   onSendMessage: (content: string, type?: string) => void;
   onBack?: () => void;
   onInspectEntity?: (entity: Entity, initialTab?: 'profile' | 'settings') => void;
+  onViewJobDetails?: (jobId: string) => void;
   isTyping?: boolean;
 }
 
@@ -27,6 +28,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   onSendMessage,
   onBack,
   onInspectEntity,
+  onViewJobDetails,
   isTyping = false
 }) => {
   const [inputText, setInputText] = useState('');
@@ -202,7 +204,11 @@ const ChatView: React.FC<ChatViewProps> = ({
                     {msg.parts?.map((part, pIdx) => (
                       <div key={pIdx} className="mt-2">
                         {part.jobCard && (
-                          <JobCardRenderer card={part.jobCard} onAction={(action) => onSendMessage(action)} />
+                          <JobCardRenderer 
+                            card={part.jobCard} 
+                            onAction={(action) => onSendMessage(action)}
+                            onViewDetails={onViewJobDetails}
+                          />
                         )}
                         {part.code && (
                           <pre className="mt-2 p-3 bg-bg-base rounded-lg text-xs font-mono overflow-x-auto">

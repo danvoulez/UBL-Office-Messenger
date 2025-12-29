@@ -13,9 +13,10 @@ interface JobCardRendererProps {
   card: JobCardData;
   onAction?: (action: string) => void;
   onStatusChange?: (jobId: string, newStatus: string) => void;
+  onViewDetails?: (jobId: string) => void;
 }
 
-const JobCardRenderer: React.FC<JobCardRendererProps> = ({ card, onAction, onStatusChange }) => {
+const JobCardRenderer: React.FC<JobCardRendererProps> = ({ card, onAction, onStatusChange, onViewDetails }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [localStatus, setLocalStatus] = useState(card.status);
 
