@@ -6,7 +6,7 @@ import { ublApi } from '../services/ublApi';
 type OnboardingStep = 'welcome' | 'tenant' | 'profile' | 'syncing' | 'ready';
 
 // Demo mode: skip backend calls when UBL is not available
-const DEMO_MODE = true; // Set to false when UBL is running
+const DEMO_MODE = false; // UBL is running - use real auth
 
 interface OnboardingContextType {
   session: UserSession | null;
@@ -48,6 +48,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id: 'T.UBL',
       name: 'UBL',
       domain: 'ubl',
+      tier: 'free',
       createdAt: new Date(),
       inviteCode: 'UBL-ADMIN',
     };
@@ -69,6 +70,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         id: `T.${domain.toUpperCase()}`,
         name,
         domain,
+        tier: 'free',
         createdAt: new Date(),
         inviteCode: `UBL-DEMO-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       };
@@ -89,6 +91,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         id: 'T.DEMO',
         name: 'Demo Organization',
         domain: 'demo',
+        tier: 'free',
         createdAt: new Date(),
         inviteCode,
       };

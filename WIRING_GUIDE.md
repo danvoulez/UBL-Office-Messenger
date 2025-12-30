@@ -84,9 +84,9 @@ The UBL Flagship Trinity consists of three interconnected systems:
 
 ## 2. Office (LLM Operating System)
 
-**Location:** `_parking_lot/office_legacy_20251227_200820/office/office/`
+**Location:** `apps/office/`
 
-**Port:** 9000 (default)
+**Port:** 8081 (default)
 
 ### How Office Connects to UBL
 
@@ -183,9 +183,9 @@ let ubl_client = Arc::new(UblClient::with_generated_key(
 
 ## 3. Messenger Frontend
 
-**Location:** `ubl-messenger/frontend/`
+**Location:** `apps/messenger/frontend/`
 
-**Port:** 5173 (Vite dev server)
+**Port:** 3000 (Vite dev server)
 
 ### API Client Configuration
 
@@ -266,7 +266,7 @@ WEBAUTHN_ORIGIN=http://localhost:8080
 ```toml
 [server]
 host = "0.0.0.0"
-port = 9000
+port = 8081
 
 [ubl]
 endpoint = "http://localhost:8080"
@@ -339,18 +339,18 @@ cargo run --release
 ### Terminal 3: Start Office
 
 ```bash
-cd _parking_lot/office_legacy_20251227_200820/office/office
+cd apps/office
 ANTHROPIC_API_KEY=sk-... cargo run --release
-# Server at http://localhost:9000
+# Server at http://localhost:8081
 ```
 
 ### Terminal 4: Start Messenger Frontend
 
 ```bash
-cd ubl-messenger/frontend
+cd apps/messenger/frontend
 npm install
 npm run dev
-# Frontend at http://localhost:5173
+# Frontend at http://localhost:3000
 ```
 
 ---

@@ -46,12 +46,11 @@ OFFICE-main/
 │   ├── scripts/            # Utility scripts
 │   └── clients/            # CLI and SDK
 │
-├── office/                 # Office (LLM Operating System)
-│   └── src/
-│       ├── middleware/     # Constitution enforcement
-│       └── ubl_client.rs   # HTTP-only UBL client
-│
-├── apps/                   # Frontend applications
+├── apps/                   # Applications
+│   ├── office/             # Office (LLM Operating System)
+│   │   └── src/
+│   │       ├── middleware/ # Constitution enforcement
+│   │       └── ubl_client/ # HTTP client for UBL
 │   └── messenger/          # UBL Messenger (React)
 │       └── frontend/
 │

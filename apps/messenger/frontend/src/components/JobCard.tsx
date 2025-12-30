@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../constants';
 import { JobCardData } from '../types';
-import { api } from '../services/apiService';
+import { jobsApi } from '../services/jobsApi';
 
 interface JobCardProps {
   data: JobCardData;
@@ -18,16 +18,17 @@ const JobCard: React.FC<JobCardProps> = ({ data: initialData }) => {
     setLoading(true);
     try {
       if (action === 'logs') {
-        const newLogs = await api.fetchJobLogs(data.id);
-        setLogs(newLogs);
+        // TODO: Implement job logs via UBL API
+        setLogs([`[${new Date().toLocaleTimeString()}] Job ${data.id} logs requested`]);
         setShowLogs(!showLogs);
-      } else {
-        const result = await api.processJobAction(data.id, action);
-        if (result.success) {
-          if (action === 'approve') setData({ ...data, status: 'running' });
-          if (action === 'abort') setData({ ...data, status: 'failed' });
-          if (action === 'download') alert("Iniciando download seguro via UBL Vault...");
-        }
+      } else if (action === 'approve') {
+        await jobsApi.approve(data.id);
+        setData({ ...data, status: 'running' });
+      } else if (action === 'abort') {
+        await jobsApi.cancel(data.id);
+        setData({ ...data, status: 'failed' });
+      } else if (action === 'download') {
+        alert("Iniciando download seguro via UBL Vault...");
       }
     } finally {
       setLoading(false);

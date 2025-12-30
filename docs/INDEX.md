@@ -62,14 +62,17 @@ Configuration files in `ubl/manifests/`:
 
 SQL migrations in `ubl/sql/`:
 
-| File | Description |
-|------|-------------|
-| `001_ledger.sql` | Core ledger tables |
-| `006_projections.sql` | Read model projections |
-| `007_pacts.sql` | Pact governance |
-| `010_sessions.sql` | WebAuthn sessions |
-| `020_console_v1_1.sql` | Console API tables |
-| `030_console_complete.sql` | Complete schema |
+| Directory | Description |
+|-----------|-------------|
+| `00_base/000_core.sql` | Core ledger tables |
+| `00_base/001_identity.sql` | Identity tables |
+| `00_base/002_policy.sql` | Policy tables |
+| `00_base/003_triggers.sql` | NOTIFY triggers |
+| `10_projections/100_console.sql` | Console projections |
+| `10_projections/101_messenger.sql` | Messenger projections |
+| `10_projections/102_office.sql` | Office projections |
+
+See `ubl/sql/MIGRATION_ORDER.txt` for apply order.
 
 ## 🧪 Scripts
 
@@ -117,5 +120,5 @@ docs/
 
 ---
 
-*Last updated: 2025-12-28*
+*Last updated: 2025-12-30*
 

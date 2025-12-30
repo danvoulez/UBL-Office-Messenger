@@ -8,12 +8,14 @@ mod affordances;
 mod receipts;
 mod events;
 mod trust;
+mod identity_events;
 
 pub use ledger::{LedgerState, LedgerEvent};
 pub use affordances::{UblAffordance, UblObligation};
 pub use receipts::Receipt;
 pub use events::EventStream;
 pub use trust::{TrustLevel, PolicyChain};
+pub use identity_events::{IdentityEvent, IdentityEventKind, IDENTITY_CONTAINER};
 
 use std::time::Duration;
 

@@ -12,6 +12,7 @@ import { publishCommand } from './cmds/publish.js';
 import { doctorCommand } from './cmds/doctor.js';
 import { runnerCommand } from './cmds/runner.js';
 import { packCommand } from './cmds/pack.js';
+import { wsTestCommands } from './cmds/ws-test.js';
 
 const program = new Command();
 program
@@ -32,5 +33,6 @@ program.addCommand(publishCommand());
 program.addCommand(doctorCommand());
 program.addCommand(runnerCommand());
 program.addCommand(packCommand());
+program.addCommand(wsTestCommands());
 
 program.parseAsync(process.argv);

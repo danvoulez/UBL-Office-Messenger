@@ -1,6 +1,6 @@
 /**
  * UBL Messenger Types
- * Merged from backup (rich architecture) + orange (Supabase compat)
+ * Core type definitions for the UBL Messenger frontend
  */
 
 // ============================================================================
@@ -84,6 +84,8 @@ export interface Entity {
   joinedAt?: string;
   location?: string;
   entityId?: string;
+  activeHours?: string;
+  completedJobs?: number;
   constitution?: {
     personality: string;
     capabilities: string[];

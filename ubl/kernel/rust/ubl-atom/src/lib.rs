@@ -64,6 +64,21 @@ pub fn canonicalize_string(value: &Value) -> Result<String> {
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
+/// Compute atom_hash = BLAKE3(canonical_bytes)
+/// 
+/// Per SPEC-UBL-ATOM v1.0 (updated): No domain tag, pure BLAKE3 of canonical form.
+/// This is the hash used in ubl-link for atom_hash field.
+pub fn atom_hash(value: &Value) -> Result<String> {
+    let canonical = canonicalize(value)?;
+    Ok(hex::encode(blake3::hash(&canonical).as_bytes()))
+}
+
+/// Compute atom_hash returning raw bytes (32 bytes)
+pub fn atom_hash_bytes(value: &Value) -> Result<[u8; 32]> {
+    let canonical = canonicalize(value)?;
+    Ok(*blake3::hash(&canonical).as_bytes())
+}
+
 /// Recursively sort object keys
 fn sort_keys_recursive(value: &Value) -> Result<Value> {
     match value {
@@ -145,5 +160,29 @@ mod tests {
         let canonical = canonicalize_string(&data).unwrap();
         assert!(!canonical.contains(' '));
         assert!(!canonical.contains('\n'));
+    }
+
+    #[test]
+    fn test_atom_hash_matches_blake3() {
+        let v = json!({"a": 1, "b": [2, 3]});
+        let h = atom_hash(&v).unwrap();
+        let canon = canonicalize(&v).unwrap();
+        let raw = hex::encode(blake3::hash(&canon).as_bytes());
+        assert_eq!(h, raw);
+    }
+
+    #[test]
+    fn test_atom_hash_deterministic() {
+        let v1 = json!({"z": 1, "a": 2});
+        let v2 = json!({"a": 2, "z": 1});
+        assert_eq!(atom_hash(&v1).unwrap(), atom_hash(&v2).unwrap());
+    }
+
+    #[test]
+    fn test_atom_hash_bytes() {
+        let v = json!({"test": true});
+        let hash_hex = atom_hash(&v).unwrap();
+        let hash_bytes = atom_hash_bytes(&v).unwrap();
+        assert_eq!(hash_hex, hex::encode(hash_bytes));
     }
 }

@@ -51,7 +51,7 @@
 
 ### 1. Messenger → UBL ✅
 
-**File:** `ubl-messenger/backend/src/ubl_client/mod.rs`
+**File:** `apps/messenger/backend/src/ubl_client/mod.rs`
 
 | Method | Event Type | Container |
 |--------|------------|-----------|
@@ -59,7 +59,7 @@
 | `store_read_receipt()` | `message.read` | C.Messenger |
 | `publish_job_event()` | `job.*` | C.Jobs |
 
-**File:** `ubl-messenger/backend/src/job/repository.rs`
+**File:** `apps/messenger/backend/src/job/repository.rs`
 
 | Method | Event Type | Container |
 |--------|------------|-----------|
@@ -79,7 +79,7 @@ All events are:
 
 ### 2. OFFICE → UBL ✅
 
-**File:** `office/office/src/entity/repository.rs`
+**File:** `apps/office/src/entity/repository.rs`
 
 | Method | Event Type | Container |
 |--------|------------|-----------|
@@ -88,7 +88,7 @@ All events are:
 | `update_baseline()` | `baseline.updated` | C.Entities |
 | `record_session()` | `session.completed` | C.Entities |
 
-**File:** `office/office/src/job_executor/executor.rs`
+**File:** `apps/office/src/job_executor/executor.rs`
 
 | Method | Event Type | Container |
 |--------|------------|-----------|
@@ -101,7 +101,7 @@ The Chair pattern:
 
 ### 3. Messenger ↔ OFFICE ✅
 
-**File:** `ubl-messenger/backend/src/office_client/mod.rs`
+**File:** `apps/messenger/backend/src/office_client/mod.rs`
 
 ```rust
 // Entity management
@@ -115,7 +115,7 @@ execute_job() → POST /jobs/execute
 execute_job_with_progress() → POST /jobs/execute/stream (SSE)
 ```
 
-**File:** `ubl-messenger/backend/src/job/routes.rs`
+**File:** `apps/messenger/backend/src/job/routes.rs`
 
 ```rust
 POST /api/jobs/:id/approve → approve_job()

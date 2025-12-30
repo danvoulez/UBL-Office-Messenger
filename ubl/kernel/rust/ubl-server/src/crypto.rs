@@ -85,8 +85,8 @@ pub async fn verify_runner_sig(
     .map_err(|e| e.to_string())?
     .ok_or("RunnerNotFound")?;
 
-    let pubkey_hex: String = row.get("pubkey_ed25519");
-    let is_active: bool = row.get("is_active");
+    let pubkey_hex: String = Row::get(&row, "pubkey_ed25519");
+    let is_active: bool = Row::get(&row, "is_active");
 
     if !is_active {
         return Err("RunnerNotActive".into());
@@ -195,13 +195,5 @@ pub mod ubl_atom_compat {
 
 use sqlx::Row;
 
-trait RowExt {
-    fn get<T: sqlx::Decode<'static, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>>(&self, col: &str) -> T;
-}
-
-impl RowExt for sqlx::postgres::PgRow {
-    fn get<T: sqlx::Decode<'static, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>>(&self, col: &str) -> T {
-        sqlx::Row::get(self, col)
-    }
-}
+// Helper: use Row::get(&row, "col") for row access to avoid trait conflicts
 

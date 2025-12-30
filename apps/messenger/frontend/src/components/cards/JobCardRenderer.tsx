@@ -39,8 +39,8 @@ const JobCardRenderer: React.FC<JobCardRendererProps> = ({ card, onAction, onSta
     setIsLoading(true);
     try {
       await ublApi.rejectJob(card.id);
-      setLocalStatus('rejected');
-      onStatusChange?.(card.id, 'rejected');
+      setLocalStatus('cancelled');
+      onStatusChange?.(card.id, 'cancelled');
       toast.error('Job rejected');
       onAction?.(`❌ Rejected: ${card.title}`);
     } catch (err: any) {

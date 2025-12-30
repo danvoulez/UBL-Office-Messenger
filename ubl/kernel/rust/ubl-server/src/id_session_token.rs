@@ -9,6 +9,50 @@ use serde_json::json;
 use std::sync::Arc;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use once_cell::sync::OnceCell;
+use sqlx::PgPool;
+
+/// Extract SID from Authorization header or session cookie
+async fn extract_sid_from_headers(pool: &PgPool, headers: &axum::http::HeaderMap) -> Result<String, String> {
+    // Try Authorization: Bearer <token>
+    if let Some(auth) = headers.get("authorization") {
+        let auth_str = auth.to_str().map_err(|_| "Invalid Authorization header".to_string())?;
+        if auth_str.starts_with("Bearer ") {
+            let token = auth_str.trim_start_matches("Bearer ").trim();
+            // Look up session by token
+            let row = sqlx::query("SELECT sid FROM id_session WHERE token = $1 AND expires_at > NOW()")
+                .bind(token)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| format!("DB error: {}", e))?;
+            if let Some(row) = row {
+                let sid: String = sqlx::Row::get(&row, "sid");
+                return Ok(sid);
+            }
+        }
+    }
+    
+    // Try session cookie
+    if let Some(cookie) = headers.get("cookie") {
+        let cookie_str = cookie.to_str().map_err(|_| "Invalid cookie".to_string())?;
+        for part in cookie_str.split(';') {
+            let part = part.trim();
+            if part.starts_with("ubl_session=") {
+                let token = part.trim_start_matches("ubl_session=");
+                let row = sqlx::query("SELECT sid FROM id_session WHERE token = $1 AND expires_at > NOW()")
+                    .bind(token)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| format!("DB error: {}", e))?;
+                if let Some(row) = row {
+                    let sid: String = sqlx::Row::get(&row, "sid");
+                    return Ok(sid);
+                }
+            }
+        }
+    }
+    
+    Err("No valid session found. Please authenticate first.".to_string())
+}
 
 #[derive(Debug, Deserialize)]
 pub struct TokenBody {
@@ -59,14 +103,16 @@ pub fn router() -> Router<AppState> {
 /// Issues a JWT Bearer token bound to the current session (SID).
 /// Requires step-up if scope contains "admin".
 async fn route_issue_token(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<TokenBody>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let (key, kid) = ensure_signing_key().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // TODO: Extract SID from Authorization header or cookie
-    let sid = "ubl:sid:placeholder".to_string();
-    let flavor = "regular".to_string();
+    // Extract SID from Authorization header (Bearer token) or session cookie
+    let sid = extract_sid_from_headers(&state.pool, &headers).await
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e))?;
+    let flavor = if headers.get("x-ubl-stepup").is_some() { "stepup" } else { "regular" }.to_string();
 
     if body.scope.iter().any(|s| s == "admin") && flavor != "stepup" {
         return Err((StatusCode::FORBIDDEN, "step-up required for admin scope".into()));

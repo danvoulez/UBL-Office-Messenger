@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, State, Query},
-    http::StatusCode,
+    http::{StatusCode, HeaderMap},
     response::IntoResponse,
     routing::{get, post, delete},
     Json, Router,
@@ -24,6 +24,7 @@ use crate::governance::{Constitution, DreamingCycle, DreamingConfig, Simulation,
 use crate::ubl_client::UblClient;
 use crate::llm::{LlmProvider, LlmRequest, LlmMessage, SmartRouter, ProviderProfile, default_profiles};
 use crate::job_executor::{JobExecutor, types as job_types};
+use crate::routes::{ws, deploy};
 use crate::{OfficeConfig, OfficeError};
 
 /// Application state
@@ -93,9 +94,27 @@ pub fn create_router(state: SharedState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Create workspace and deploy routers with state access
+    // Note: We'll access UBL client from state inside the handlers
+    let ws_state = state.clone();
+    let deploy_state = state.clone();
+    
+    let ws_router = Router::new()
+        .route("/office/ws/test", axum::routing::post(ws_test_handler))
+        .route("/office/ws/build", axum::routing::post(ws_build_handler))
+        .with_state(ws_state);
+    
+    let deploy_router = Router::new()
+        .route("/office/deploy", axum::routing::post(deploy_handler))
+        .with_state(deploy_state);
+
     Router::new()
         // Health
         .route("/health", get(health))
+        
+        // Workspace and Deploy routes (Prompt 1: Office front-door)
+        .merge(ws_router)
+        .merge(deploy_router)
 
         // Entities
         .route("/entities", post(create_entity))
@@ -948,4 +967,62 @@ impl From<OfficeError> for ApiError {
             _ => ApiError::Internal(err.to_string()),
         }
     }
+}
+
+// Workspace and Deploy route handlers (Prompt 1: Office front-door)
+async fn ws_test_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(body): Json<crate::types::WsTestBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    let state_read = state.read().await;
+    let ubl_client = state_read.ubl_client.clone();
+    let ubl_base = state_read.config.ubl.endpoint.clone();
+    drop(state_read);
+    
+    let office_state = ws::OfficeState {
+        ubl_base,
+        ubl_client,
+    };
+    
+    ws::ws_test(State(office_state), headers, Json(body)).await
+        .map_err(|(status, msg)| ApiError::Internal(format!("{}: {}", status, msg)))
+}
+
+async fn ws_build_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(body): Json<crate::types::WsBuildBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    let state_read = state.read().await;
+    let ubl_client = state_read.ubl_client.clone();
+    let ubl_base = state_read.config.ubl.endpoint.clone();
+    drop(state_read);
+    
+    let office_state = ws::OfficeState {
+        ubl_base,
+        ubl_client,
+    };
+    
+    ws::ws_build(State(office_state), headers, Json(body)).await
+        .map_err(|(status, msg)| ApiError::Internal(format!("{}: {}", status, msg)))
+}
+
+async fn deploy_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(body): Json<crate::types::DeployBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    let state_read = state.read().await;
+    let ubl_client = state_read.ubl_client.clone();
+    let ubl_base = state_read.config.ubl.endpoint.clone();
+    drop(state_read);
+    
+    let office_state = deploy::OfficeState {
+        ubl_base,
+        ubl_client,
+    };
+    
+    deploy::deploy(State(office_state), headers, Json(body)).await
+        .map_err(|(status, msg)| ApiError::Internal(format!("{}: {}", status, msg)))
 }

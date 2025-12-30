@@ -39,9 +39,13 @@ pub const MAX_GAS: u64 = 100_000;
 pub const MAX_STACK_SIZE: usize = 1024;
 
 /// Valid intent classes per SPEC-UBL-CORE v1.0 §6.2
+/// Intent class for Observation operations (read-only queries, no state changes)
 pub const INTENT_CLASS_OBSERVATION: u8 = 0x00;
+/// Intent class for Conservation operations (read-only, no state changes)
 pub const INTENT_CLASS_CONSERVATION: u8 = 0x01;
+/// Intent class for Entropy operations (state-changing mutations)
 pub const INTENT_CLASS_ENTROPY: u8 = 0x02;
+/// Intent class for Evolution operations (schema changes, requires multi-sig)
 pub const INTENT_CLASS_EVOLUTION: u8 = 0x03;
 
 // ============================================================================
@@ -267,7 +271,14 @@ pub enum BytecodeError {
     
     /// Type mismatch in operation
     #[error("Type mismatch at pc={pc}: expected {expected}, got {got}")]
-    TypeMismatch { pc: usize, expected: &'static str, got: String },
+    TypeMismatch { 
+        /// Program counter where error occurred
+        pc: usize, 
+        /// Expected type name
+        expected: &'static str, 
+        /// Actual type name found
+        got: String 
+    },
     
     /// Invalid opcode encountered
     #[error("Invalid opcode 0x{0:02X} at pc={1}")]
@@ -318,6 +329,7 @@ pub enum BytecodeError {
     TruncatedBytecode(usize, usize, usize),
 }
 
+/// Result type alias for bytecode operations
 pub type Result<T> = std::result::Result<T, BytecodeError>;
 
 // ============================================================================
@@ -375,7 +387,7 @@ impl CompiledPolicy {
         }
 
         // Check individual string lengths
-        for (i, s) in self.constants.iter().enumerate() {
+        for (_i, s) in self.constants.iter().enumerate() {
             if s.len() > MAX_STRING_LENGTH {
                 return Err(BytecodeError::StringTooLong(s.len(), MAX_STRING_LENGTH));
             }
@@ -1004,7 +1016,7 @@ pub enum PolicyResult {
         intent_class: u8,
         /// Required pact ID (if any)
         required_pact: Option<String>,
-        /// Applied constraints
+        /// Applied constraints (rule IDs that matched)
         constraints: Vec<String>,
     },
     /// Deny the translation

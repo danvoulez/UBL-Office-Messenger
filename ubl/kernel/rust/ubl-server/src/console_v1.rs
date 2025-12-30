@@ -387,16 +387,16 @@ async fn issue_command(
     };
 
     // Extract fields
-    let used: bool = row.get("used");
-    let exp_ms: i64 = row.get("exp_ms");
-    let binding_hash: String = row.get("binding_hash");
-    let sig: String = row.get("sig");
-    let office: String = row.get("office");
-    let action: String = row.get("action");
-    let target: String = row.get("target");
-    let args_json: serde_json::Value = row.get("args_json");
-    let risk: String = row.get("risk");
-    let plan_hash: String = row.get("plan_hash");
+    let used: bool = Row::get(&row, "used");
+    let exp_ms: i64 = Row::get(&row, "exp_ms");
+    let binding_hash: String = Row::get(&row, "binding_hash");
+    let sig: String = Row::get(&row, "sig");
+    let office: String = Row::get(&row, "office");
+    let action: String = Row::get(&row, "action");
+    let target: String = Row::get(&row, "target");
+    let args_json: serde_json::Value = Row::get(&row, "args_json");
+    let risk: String = Row::get(&row, "risk");
+    let plan_hash: String = Row::get(&row, "plan_hash");
 
     // Validate: not used
     if used {
@@ -507,17 +507,17 @@ async fn query_commands(
     let commands: Vec<CommandRow> = rows
         .into_iter()
         .map(|row| CommandRow {
-            command_id: row.get("command_id"),
-            permit_jti: row.get("permit_jti"),
-            office: row.get("office"),
-            action: row.get("action"),
-            target: row.get("target"),
-            args: row.get("args_json"),
-            risk: row.get("risk"),
-            plan_hash: row.get("plan_hash"),
-            binding_hash: row.get("binding_hash"),
-            pending: row.get("pending"),
-            created_at_ms: row.get("created_at_ms"),
+            command_id: Row::get(&row, "command_id"),
+            permit_jti: Row::get(&row, "permit_jti"),
+            office: Row::get(&row, "office"),
+            action: Row::get(&row, "action"),
+            target: Row::get(&row, "target"),
+            args: Row::get(&row, "args_json"),
+            risk: Row::get(&row, "risk"),
+            plan_hash: Row::get(&row, "plan_hash"),
+            binding_hash: Row::get(&row, "binding_hash"),
+            pending: Row::get(&row, "pending"),
+            created_at_ms: Row::get(&row, "created_at_ms"),
         })
         .collect();
 
@@ -562,7 +562,7 @@ async fn exec_finish(
         }
     };
 
-    let pending: bool = cmd.get("pending");
+    let pending: bool = Row::get(&cmd, "pending");
     if !pending {
         return (
             StatusCode::CONFLICT,
@@ -571,8 +571,8 @@ async fn exec_finish(
             .into_response();
     }
 
-    let permit_jti: String = cmd.get("permit_jti");
-    let binding_hash: String = cmd.get("binding_hash");
+    let permit_jti: String = Row::get(&cmd, "permit_jti");
+    let binding_hash: String = Row::get(&cmd, "binding_hash");
 
     // Build receipt payload for signature verification
     let receipt_payload = serde_json::json!({

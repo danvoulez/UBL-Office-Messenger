@@ -30,8 +30,11 @@ pub enum CompilerError {
     /// Too many constraints in a rule
     #[error("Too many constraints in rule '{rule_id}': {count} (max {max})")]
     TooManyConstraints {
+        /// Rule identifier that has too many constraints
         rule_id: String,
+        /// Number of constraints found
         count: usize,
+        /// Maximum allowed constraints
         max: usize,
     },
 
@@ -59,27 +62,40 @@ pub struct PolicyRule {
     pub required_pact: Option<String>,
 }
 
+/// Defines the scope where a policy rule applies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AppliesTo {
     /// All containers
     Global,
     /// Specific container
-    Container { id: String },
+    Container { 
+        /// Container identifier
+        id: String 
+    },
     /// Namespace prefix
-    Namespace { prefix: String },
+    Namespace { 
+        /// Namespace prefix string
+        prefix: String 
+    },
 }
 
+/// Intent class specification for policy rules
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IntentClassSpec {
+    /// Observation intent class (0x00) - read-only queries
     Observation,
+    /// Conservation intent class (0x01) - read-only operations
     Conservation,
+    /// Entropy intent class (0x02) - state-changing mutations
     Entropy,
+    /// Evolution intent class (0x03) - schema changes, requires multi-sig
     Evolution,
 }
 
 impl IntentClassSpec {
+    /// Convert intent class spec to byte value (0x00-0x03)
     pub fn to_byte(&self) -> u8 {
         match self {
             IntentClassSpec::Observation => 0x00,
@@ -95,25 +111,49 @@ impl IntentClassSpec {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Constraint {
     /// Check intent type equals value
-    IntentTypeEquals { value: String },
+    IntentTypeEquals { 
+        /// Expected intent type value
+        value: String 
+    },
     /// Check intent amount is <= max
-    AmountMax { max: i64 },
+    AmountMax { 
+        /// Maximum allowed amount
+        max: i64 
+    },
     /// Check intent amount is >= min
-    AmountMin { min: i64 },
+    AmountMin { 
+        /// Minimum required amount
+        min: i64 
+    },
     /// Check container starts with prefix
-    ContainerPrefix { prefix: String },
+    ContainerPrefix { 
+        /// Required container ID prefix
+        prefix: String 
+    },
     /// Check actor equals value
-    ActorEquals { actor: String },
+    ActorEquals { 
+        /// Required actor identifier
+        actor: String 
+    },
     /// Custom field check
-    FieldEquals { field: String, value: String },
+    FieldEquals { 
+        /// Field name to check
+        field: String, 
+        /// Expected field value
+        value: String 
+    },
 }
 
 /// Policy definition (collection of rules)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyDefinition {
+    /// Unique policy identifier
     pub policy_id: String,
+    /// Semantic version (e.g., "1.0.0")
     pub version: String,
+    /// Human-readable description
     pub description: String,
+    /// List of policy rules
     pub rules: Vec<PolicyRule>,
     /// Default action if no rule matches
     pub default_deny: bool,
@@ -156,7 +196,7 @@ impl PolicyCompiler {
         }
 
         // Check each rule
-        for (i, rule) in policy.rules.iter().enumerate() {
+        for (_i, rule) in policy.rules.iter().enumerate() {
             if rule.constraints.len() > MAX_CONSTRAINTS_PER_RULE {
                 return Err(CompilerError::TooManyConstraints {
                     rule_id: rule.rule_id.clone(),

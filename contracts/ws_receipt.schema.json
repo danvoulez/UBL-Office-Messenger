@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ubl://contracts/ws_receipt.schema.json",
+  "title": "Workspace Receipt",
+  "description": "Receipt returned after workspace operations",
+  "type": "object",
+  "required": ["kind", "ok", "ts", "metrics"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "ws/receipt",
+      "description": "Receipt type identifier"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "Whether the operation succeeded"
+    },
+    "ts": {
+      "type": "integer",
+      "description": "Unix timestamp in milliseconds"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "duration_ms": {
+          "type": "integer",
+          "description": "Operation duration in milliseconds"
+        },
+        "bytes_processed": {
+          "type": "integer",
+          "description": "Number of bytes processed"
+        },
+        "entries_count": {
+          "type": "integer",
+          "description": "Number of entries affected"
+        }
+      },
+      "additionalProperties": true,
+      "description": "Operation metrics"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if ok=false"
+    },
+    "entry_hash": {
+      "type": "string",
+      "description": "Hash of the created entry (if applicable)"
+    }
+  },
+  "additionalProperties": false
+}

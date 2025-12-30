@@ -1,7 +1,7 @@
 # 📊 TRINITY STATUS — Single Source of Truth
 
-**Last Updated**: 2024-12-27  
-**Version**: 0.1.0-alpha
+**Last Updated**: 2025-12-30  
+**Version**: 0.2.0-alpha
 
 ---
 
@@ -21,10 +21,10 @@
 
 | # | Issue | Location | Status |
 |---|-------|----------|--------|
-| 1 | ~~Mock signatures in message storage~~ | `ubl-messenger/backend/src/ubl_client/mod.rs` | ✅ Fixed |
-| 2 | ~~No canonicalization in message storage~~ | `ubl-messenger/backend/src/ubl_client/mod.rs` | ✅ Fixed |
+| 1 | ~~Mock signatures in message storage~~ | `apps/messenger/backend/src/ubl_client/mod.rs` | ✅ Fixed |
+| 2 | ~~No canonicalization in message storage~~ | `apps/messenger/backend/src/ubl_client/mod.rs` | ✅ Fixed |
 | 3 | ~~unwrap() in store operations~~ | Multiple files | ✅ Fixed |
-| 4 | ~~Office UblClient constructor mismatch~~ | `office/office/src/main.rs` | ✅ Fixed |
+| 4 | ~~Office UblClient constructor mismatch~~ | `apps/office/src/main.rs` | ✅ Fixed |
 | 5 | ~~UBL commit doesn't verify signature~~ | `ubl/kernel/rust/ubl-server/src/main.rs` | ✅ Fixed |
 | 6 | ~~Commit doesn't store atom data~~ | `ubl/kernel/rust/ubl-server/src/db.rs` | ✅ Already done |
 | 7 | ~~GET /atom/:hash endpoint~~ | `ubl/kernel/rust/ubl-server/src/main.rs` | ✅ Added |
@@ -36,11 +36,11 @@
 
 | # | Issue | Location | Status |
 |---|-------|----------|--------|
-| 7 | Race condition: HashMap before UBL commit | `ubl-messenger/backend/src/job/repository.rs` | ⏳ |
+| 7 | Race condition: HashMap before UBL commit | `apps/messenger/backend/src/job/repository.rs` | ⏳ |
 | 8 | Missing retry logic for UBL commits | Multiple clients | ⏳ |
 | 9 | Hardcoded container IDs | Multiple files | ⏳ |
 | 10 | Missing authentication middleware | Routes | ⏳ |
-| 11 | Office JobExecutor TODOs | `office/office/src/job_executor/` | ⏳ |
+| 11 | Office JobExecutor TODOs | `apps/office/src/job_executor/` | ⏳ |
 
 ---
 
@@ -58,21 +58,19 @@
 ## 📁 Key Files
 
 ### UBL Kernel
-- `ubl/kernel/rust/ubl-kernel/src/lib.rs` — Crypto primitives (BLAKE3, Ed25519)
-- `ubl/kernel/rust/ubl-atom/src/lib.rs` — JSON✯Atomic canonicalization
+- `ubl/kernel/rust/ubl-atom/src/lib.rs` — JSON✨Atomic canonicalization
 - `ubl/kernel/rust/ubl-server/src/main.rs` — HTTP API server
 - `ubl/kernel/rust/ubl-membrane/src/lib.rs` — Commit validation
 
 ### Office
-- `office/office/src/main.rs` — Server entry point
-- `office/office/src/ubl_client/mod.rs` — UBL client with signing
-- `office/office/src/job_executor/` — Job execution engine
+- `apps/office/src/main.rs` — Server entry point
+- `apps/office/src/ubl_client/mod.rs` — UBL client with signing
+- `apps/office/src/job_executor/` — Job execution engine
 
 ### Messenger
-- `ubl-messenger/backend/src/main.rs` — Rust backend entry
-- `ubl-messenger/backend/src/ubl_client/mod.rs` — UBL client with signing
-- `ubl-messenger/backend/src/job/` — Job lifecycle
-- `ubl-messenger/frontend/` — React frontend
+- `apps/messenger/frontend/src/App.tsx` — React frontend entry
+- `apps/messenger/frontend/src/services/ublApi.ts` — UBL client
+- `apps/messenger/frontend/src/hooks/useSSE.ts` — Real-time updates
 
 ---
 
@@ -80,11 +78,10 @@
 
 | Service | Port | Host |
 |---------|------|------|
-| Postgres | 5432 | LAB 256 |
-| UBL Server | 8080 | LAB 256 |
-| Office | 8787 | LAB 256 |
-| Messenger Backend | 4000 | LAB 256 |
-| Messenger Frontend | 5173 | LAB 8GB |
+| Postgres | 5432 | localhost |
+| UBL Kernel | 8080 | localhost |
+| Office | 8081 | localhost |
+| Messenger Frontend | 3000 | localhost |
 
 ---
 

@@ -6,16 +6,38 @@ export const LEDGER_CONFIG = {
 };
 
 export class LedgerService {
+  /**
+   * Generate a deterministic SHA-256 hash of content
+   * IMPORTANT: Does NOT include timestamp - hash is deterministic for same input
+   */
   static async generateHash(content: string): Promise<string> {
     const encoder = new TextEncoder();
-    const data = encoder.encode(content + Date.now().toString());
+    const data = encoder.encode(content);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return `0X${hashHex.slice(0, 32)}`.toUpperCase();
+    return `0x${hashHex}`;
   }
 
+  /**
+   * Generate hash with previous hash for chain linking
+   * This is the proper way to create ledger entry hashes
+   */
+  static async generateChainHash(content: string, previousHash: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(previousHash + content);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return `0x${hashHex}`;
+  }
+
+  /**
+   * @deprecated Use generateHash() instead - this is not cryptographically secure
+   * Kept for backwards compatibility
+   */
   static generateHashSync(content: string): string {
+    console.warn('generateHashSync is deprecated and not cryptographically secure');
     let hash = 0;
     for (let i = 0; i < content.length; i++) {
       const char = content.charCodeAt(i);
@@ -23,8 +45,9 @@ export class LedgerService {
       hash = hash & hash;
     }
     const hex = Math.abs(hash).toString(16).padStart(8, '0');
-    const timestamp = Date.now().toString(16);
-    return `0X${hex}${timestamp}${Math.random().toString(16).slice(2, 10)}`.toUpperCase();
+    // Use content-based suffix instead of random for determinism
+    const suffix = content.length.toString(16).padStart(8, '0');
+    return `0X${hex}${suffix}`.toUpperCase();
   }
 
   static calculateExecutionCost(content: string, isAgent: boolean): number {

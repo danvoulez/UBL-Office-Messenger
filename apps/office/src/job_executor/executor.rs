@@ -240,7 +240,21 @@ impl JobExecutor {
         // Get current state
         let state = self.ubl_client.get_state(&self.container_id).await?;
         
-        // Build link commit
+        // Build signing bytes for the link commit
+        let signing_data = format!(
+            "{}|{}|{}|{}|{}|observation|0",
+            1, // version
+            self.container_id,
+            state.sequence + 1,
+            state.last_hash,
+            atom_hash
+        );
+        
+        // Sign with the UBL client's key
+        let signature = self.ubl_client.sign(signing_data.as_bytes());
+        let author_pubkey = self.ubl_client.pubkey_hex().to_string();
+        
+        // Build link commit with proper signature
         let link = crate::ubl_client::LinkCommit {
             version: 1,
             container_id: self.container_id.clone(),
@@ -250,8 +264,8 @@ impl JobExecutor {
             intent_class: "observation".to_string(),
             physics_delta: 0,
             pact: None,
-            author_pubkey: "office".to_string(), // TODO: Use actual key
-            signature: "mock".to_string(), // TODO: Sign properly
+            author_pubkey,
+            signature: format!("ed25519:{}", signature),
         };
         
         // Commit

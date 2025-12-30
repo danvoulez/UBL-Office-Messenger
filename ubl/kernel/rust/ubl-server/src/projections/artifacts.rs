@@ -32,10 +32,11 @@ impl ArtifactsProjection {
         }
 
         // Extract artifacts from tool.result payload
+        let empty_vec: Vec<serde_json::Value> = vec![];
         let artifacts = atom.get("payload")
             .and_then(|p| p.get("artifacts"))
             .and_then(|a| a.as_array())
-            .unwrap_or(&vec![]);
+            .unwrap_or(&empty_vec);
 
         for artifact in artifacts {
             if let Some(artifact_id) = artifact.get("artifact_id").and_then(|v| v.as_str()) {

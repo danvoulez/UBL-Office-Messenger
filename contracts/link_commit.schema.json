@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ubl://contracts/link_commit.schema.json",
+  "title": "UBL Link Commit",
+  "description": "The commit structure that crosses the Mind→Body boundary (SPEC-UBL-LINK v1.0)",
+  "type": "object",
+  "required": [
+    "version",
+    "container_id",
+    "expected_sequence",
+    "previous_hash",
+    "atom_hash",
+    "intent_class",
+    "physics_delta",
+    "author_pubkey",
+    "signature"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Protocol version (must be 1)"
+    },
+    "container_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "description": "Container identifier"
+    },
+    "expected_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Expected sequence number"
+    },
+    "previous_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Hash of the previous entry (64 hex chars)"
+    },
+    "atom_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "BLAKE3 hash of the canonical atom (64 hex chars)"
+    },
+    "intent_class": {
+      "type": "string",
+      "enum": ["Observation", "Conservation", "Entropy", "Evolution"],
+      "description": "Physical classification of intent"
+    },
+    "physics_delta": {
+      "type": "string",
+      "pattern": "^-?[0-9]+$",
+      "description": "Physical delta as string (i128)"
+    },
+    "pact": {
+      "type": "object",
+      "properties": {
+        "pact_id": {"type": "string"},
+        "signatures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "signer": {"type": "string"},
+              "signature": {"type": "string"}
+            },
+            "required": ["signer", "signature"]
+          }
+        }
+      },
+      "required": ["pact_id", "signatures"],
+      "description": "Pact proof for Entropy/Evolution operations"
+    },
+    "author_pubkey": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Author's Ed25519 public key (64 hex chars)"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{128}$",
+      "description": "Ed25519 signature (128 hex chars)"
+    },
+    "atom": {
+      "type": "object",
+      "description": "Optional: the actual atom data (not included in signature)"
+    }
+  },
+  "additionalProperties": false
+}

@@ -101,12 +101,12 @@ impl PolicyEngine {
         // Query for prior message.sent event with this card_id
         let card_exists = sqlx::query!(
             r#"
-            SELECT 1
+            SELECT 1 as exists_check
             FROM ledger_atom la
-            JOIN ledger_entry le ON la.hash = le.link_hash
+            JOIN ledger_entry le ON la.atom_hash = le.link_hash
             WHERE le.container_id = 'C.Messenger'
-              AND la.data->>'type' = 'message.sent'
-              AND la.data->'payload'->'card'->>'card_id' = $1
+              AND la.atom_data->>'type' = 'message.sent'
+              AND la.atom_data->'payload'->'card'->>'card_id' = $1
             LIMIT 1
             "#,
             card_id
@@ -165,12 +165,12 @@ impl PolicyEngine {
             // Check if tool.called exists for this tool_call_id
             let called_exists = sqlx::query!(
                 r#"
-                SELECT 1
+                SELECT 1 as exists_check
                 FROM ledger_atom la
-                JOIN ledger_entry le ON la.hash = le.link_hash
+                JOIN ledger_entry le ON la.atom_hash = le.link_hash
                 WHERE le.container_id = 'C.Jobs'
-                  AND la.data->>'type' = 'tool.called'
-                  AND la.data->'payload'->>'tool_call_id' = $1
+                  AND la.atom_data->>'type' = 'tool.called'
+                  AND la.atom_data->'payload'->>'tool_call_id' = $1
                 LIMIT 1
                 "#,
                 tool_call_id

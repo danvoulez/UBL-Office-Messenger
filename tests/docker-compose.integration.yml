@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image:  postgres:16-alpine
+    environment:
+      POSTGRES_USER: ubl_test
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: ubl_test
+    ports:
+      - "5432:5432"
+    volumes: 
+      - postgres_data:/var/lib/postgresql/data
+      - ../ubl/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ubl_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - integration-net
+
+  # UBL Kernel
+  ubl-kernel:
+    build: 
+      context: ../ubl/kernel/rust
+      dockerfile: ubl-server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://ubl_test:test_password@postgres:5432/ubl_test
+      PORT: 8080
+      RUST_LOG: debug
+      WEBAUTHN_RP_ID: localhost
+      WEBAUTHN_ORIGIN: http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - integration-net
+
+  # Office Runtime
+  office: 
+    build:
+      context:  ../apps/office
+      dockerfile: Dockerfile
+    environment:
+      OFFICE__LLM__API_KEY:  ${ANTHROPIC_API_KEY:-test-key}
+      OFFICE__LLM__PROVIDER: anthropic
+      OFFICE__UBL__ENDPOINT: http://ubl-kernel:8080
+      OFFICE__UBL__CONTAINER_ID: C.Office
+      OFFICE__SERVER__HOST: 0.0.0.0
+      OFFICE__SERVER__PORT:  8081
+      RUST_LOG: debug
+    ports: 
+      - "8081:8081"
+    depends_on: 
+      ubl-kernel: 
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - integration-net
+
+  # Messenger Frontend
+  messenger:
+    build: 
+      context: ../apps/messenger/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+      VITE_OFFICE_URL: http://localhost:8081
+      VITE_TENANT_ID: T.UBL
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ubl-kernel
+      - office
+    networks:
+      - integration-net
+
+  # Integration Test Runner
+  integration-tests:
+    build:
+      context: ./rust
+      dockerfile: Dockerfile
+    environment:
+      UBL_URL: http://ubl-kernel:8080
+      OFFICE_URL: http://office:8081
+      MESSENGER_URL: http://messenger:3000
+      DATABASE_URL: postgres://ubl_test:test_password@postgres:5432/ubl_test
+      RUST_LOG: debug
+      RUST_BACKTRACE: 1
+    depends_on:
+      ubl-kernel:
+        condition:  service_healthy
+      office: 
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./rust:/workspace
+      - cargo_cache:/usr/local/cargo/registry
+    networks:
+      - integration-net
+    command: cargo test --all-features -- --test-threads=1 --nocapture
+
+  # E2E Test Runner (Playwright)
+  e2e-tests:
+    build:
+      context: ../e2e
+      dockerfile: Dockerfile
+    environment:
+      BASE_URL: http://messenger:3000
+      UBL_URL: http://ubl-kernel:8080
+    depends_on:
+      - messenger
+      - ubl-kernel
+      - office
+    volumes:
+      - ../e2e:/workspace
+      - /workspace/node_modules
+    networks:
+      - integration-net
+    command: npx playwright test
+
+networks:
+  integration-net: 
+    driver: bridge
+
+volumes: 
+  postgres_data:
+  cargo_cache:

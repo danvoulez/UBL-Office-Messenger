@@ -60,23 +60,23 @@ impl MessagesProjection {
         let timestamp = atom["timestamp"].as_str().unwrap_or_default();
         let message_type = atom["message_type"].as_str().unwrap_or("text");
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO projection_messages (
                 message_id, conversation_id, from_id, content_hash, timestamp,
                 message_type, last_event_hash, last_event_seq
             ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7, $8)
             ON CONFLICT (message_id) DO NOTHING
-            "#,
-            message_id,
-            conversation_id,
-            from_id,
-            content_hash,
-            timestamp,
-            message_type,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(message_id)
+        .bind(conversation_id)
+        .bind(from_id)
+        .bind(content_hash)
+        .bind(timestamp)
+        .bind(message_type)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -121,20 +121,20 @@ impl MessagesProjection {
     ) -> Result<Vec<Message>, sqlx::Error> {
         let before = before_seq.unwrap_or(i64::MAX);
         
-        sqlx::query_as!(
-            Message,
+        sqlx::query_as::<_, Message>(
             r#"
             SELECT message_id, conversation_id, from_id, content_hash, timestamp,
-                   message_type, read_by, last_event_hash, last_event_seq
+                   message_type, COALESCE(read_by, ARRAY[]::text[]) as read_by, 
+                   last_event_hash, last_event_seq
             FROM projection_messages
             WHERE conversation_id = $1 AND last_event_seq < $2
             ORDER BY timestamp DESC
             LIMIT $3
-            "#,
-            conversation_id,
-            before,
-            limit
+            "#
         )
+        .bind(conversation_id)
+        .bind(before)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
     }

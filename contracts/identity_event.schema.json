@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ubl://contracts/identity_event.schema.json",
+  "title": "C.Identity Event",
+  "description": "Identity events anchored to the UBL ledger (C.Identity container)",
+  "type": "object",
+  "required": ["kind", "payload", "ts"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "person_registered",
+        "person_authenticated",
+        "stepup_granted",
+        "counter_rollback",
+        "agent_created",
+        "asc_issued",
+        "session_created"
+      ],
+      "description": "Type of identity event"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Event-specific payload data"
+    },
+    "ts": {
+      "type": "integer",
+      "description": "Unix timestamp in milliseconds"
+    }
+  },
+  "additionalProperties": false
+}

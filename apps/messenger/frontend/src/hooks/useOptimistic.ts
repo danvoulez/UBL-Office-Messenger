@@ -1,5 +1,5 @@
 /**
- * Optimistic UI Hooks (Gemini P1 #6)
+ * Optimistic UI Hooks
  *
  * Problem: Full UBL cycle (User -> UBL -> Office -> UBL -> SSE -> User)
  * has physical latency (1-3 seconds). Users perceive this as "lag".

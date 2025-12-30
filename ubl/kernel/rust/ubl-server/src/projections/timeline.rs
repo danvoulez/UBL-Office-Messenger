@@ -59,12 +59,10 @@ impl TimelineProjection {
         cursor: Option<&str>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
-        let query = if let Some(cursor_val) = cursor {
-            // Parse cursor: seq:timestamp
-            let parts: Vec<&str> = cursor_val.split(':').collect();
-            let seq: i64 = parts.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
-            
-            sqlx::query!(
+        use sqlx::Row;
+        
+        let rows = if let Some(cursor_val) = cursor {
+            sqlx::query(
                 r#"
                 SELECT cursor, item_type, item_data, created_at
                 FROM projection_timeline_items
@@ -72,35 +70,41 @@ impl TimelineProjection {
                   AND cursor > $3
                 ORDER BY created_at ASC
                 LIMIT $4
-                "#,
-                tenant_id,
-                conversation_id,
-                cursor_val,
-                limit
+                "#
             )
+            .bind(tenant_id)
+            .bind(conversation_id)
+            .bind(cursor_val)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
         } else {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 SELECT cursor, item_type, item_data, created_at
                 FROM projection_timeline_items
                 WHERE tenant_id = $1 AND conversation_id = $2
                 ORDER BY created_at DESC
                 LIMIT $3
-                "#,
-                tenant_id,
-                conversation_id,
-                limit
+                "#
             )
+            .bind(tenant_id)
+            .bind(conversation_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
         };
 
-        let rows = query.fetch_all(&self.pool).await?;
-
         Ok(rows.into_iter().map(|r| {
+            let cursor: String = r.get("cursor");
+            let item_type: String = r.get("item_type");
+            let item_data: serde_json::Value = r.get("item_data");
+            let created_at: time::OffsetDateTime = r.get("created_at");
             serde_json::json!({
-                "cursor": r.cursor,
-                "item_type": r.item_type,
-                "item_data": r.item_data,
-                "created_at": r.created_at.to_string(),
+                "cursor": cursor,
+                "item_type": item_type,
+                "item_data": item_data,
+                "created_at": created_at.to_string(),
             })
         }).collect())
     }

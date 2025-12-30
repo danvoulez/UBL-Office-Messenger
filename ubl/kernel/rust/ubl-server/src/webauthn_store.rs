@@ -77,7 +77,8 @@ pub async fn begin_stepup(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("WebAuthn error: {:?}", e)))?;
 
     // 4. Extract challenge from RCR for storage
-    let challenge_b64 = URL_SAFE_NO_PAD.encode(rcr.public_key.challenge.0.as_slice());
+    // Base64UrlSafeData implements AsRef<[u8]>
+    let challenge_b64 = URL_SAFE_NO_PAD.encode(rcr.public_key.challenge.as_ref());
 
     // 5. Serialize auth_state for later verification
     let auth_state_bytes = serde_json::to_vec(&auth_state)
@@ -168,12 +169,12 @@ pub async fn verify_stepup_assertion(
     .map_err(|e| e.to_string())?
     .ok_or("StepUpChallengeNotFound")?;
 
-    let challenge_id: String = row.get("challenge_id");
-    let user_id: String = row.get("user_id");
-    let binding_hash: String = row.get("binding_hash");
-    let auth_state_bytes: Vec<u8> = row.get("auth_state");
-    let exp_ms: i64 = row.get("exp_ms");
-    let used: bool = row.get("used");
+    let challenge_id: String = Row::get(&row, "challenge_id");
+    let user_id: String = Row::get(&row, "user_id");
+    let binding_hash: String = Row::get(&row, "binding_hash");
+    let auth_state_bytes: Vec<u8> = Row::get(&row, "auth_state");
+    let exp_ms: i64 = Row::get(&row, "exp_ms");
+    let used: bool = Row::get(&row, "used");
 
     // 4. Validate: not used, not expired, binding matches
     if used {
@@ -244,13 +245,6 @@ pub fn extract_approver_id(assertion_json: &AssertionJson) -> Option<String> {
 
 use sqlx::Row;
 
-trait RowExt {
-    fn get<T: sqlx::Decode<'static, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>>(&self, col: &str) -> T;
-}
-
-impl RowExt for sqlx::postgres::PgRow {
-    fn get<T: sqlx::Decode<'static, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>>(&self, col: &str) -> T {
-        sqlx::Row::get(self, col)
-    }
-}
+// Note: We removed the RowExt trait to avoid conflicts with sqlx::Row::get
+// Use Row::get(&row, "col") directly instead of row.get("col")
 

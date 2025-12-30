@@ -240,11 +240,10 @@ async fn send_message(
             container_id: container_id.to_string(),
             sequence: 0,
             entry_hash: "0x00".to_string(),
+            previous_hash: "0x00".to_string(),
             link_hash: "0x00".to_string(),
             ts_unix_ms: 0,
         });
-    
-    // 7. Build link draft
     // Note: In production, signature would be from user's passkey or delegated agent
     let link = LinkDraft {
         version: 1,
@@ -334,6 +333,7 @@ async fn create_conversation(
             container_id: container_id.to_string(),
             sequence: 0,
             entry_hash: "0x00".to_string(),
+            previous_hash: "0x00".to_string(),
             link_hash: "0x00".to_string(),
             ts_unix_ms: 0,
         });
@@ -428,6 +428,7 @@ async fn job_decision(
             container_id: container_id.to_string(),
             sequence: 0,
             entry_hash: "0x00".to_string(),
+            previous_hash: "0x00".to_string(),
             link_hash: "0x00".to_string(),
             ts_unix_ms: 0,
         });

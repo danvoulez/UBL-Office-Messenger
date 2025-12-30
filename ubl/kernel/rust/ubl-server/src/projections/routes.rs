@@ -63,23 +63,28 @@ async fn list_jobs(
     let limit = query.limit.unwrap_or(50).min(100);
     let before_seq = query.before_seq.unwrap_or(i64::MAX);
 
-    let jobs = sqlx::query_as!(
-        Job,
+    let jobs = sqlx::query_as::<_, Job>(
         r#"
-        SELECT job_id, conversation_id, title, description, status, priority,
-               assigned_to, created_by, created_at, started_at, completed_at,
+        SELECT job_id, conversation_id, 
+               COALESCE(title, '') as title, 
+               COALESCE(description, '') as description, 
+               COALESCE(status, 'pending') as status, 
+               COALESCE(priority, 'normal') as priority,
+               assigned_to, 
+               COALESCE(created_by, '') as created_by, 
+               created_at, started_at, completed_at,
                cancelled_at, progress, progress_message, result_summary,
                result_artifacts, estimated_duration_seconds,
-               estimated_value as "estimated_value: f64",
+               estimated_value,
                last_event_hash, last_event_seq
         FROM projection_jobs
         WHERE last_event_seq < $1
         ORDER BY created_at DESC
         LIMIT $2
-        "#,
-        before_seq,
-        limit
+        "#
     )
+    .bind(before_seq)
+    .bind(limit)
     .fetch_all(&state.pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

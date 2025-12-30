@@ -78,6 +78,8 @@ struct AppState {
     pool: PgPool,
     ledger: PgLedger,
     policy_registry: std::sync::Arc<policy_registry::PolicyRegistry>,
+    tail_tx: tokio::sync::broadcast::Sender<(String, String)>, // (container_id, sequence_str) - matches TailBus
+    tail_bus: sse::TailBus, // New: simplified SSE bus
 }
 
 // ============================================================================
@@ -370,9 +372,12 @@ async fn route_commit(
         Ok(entry) => {
             info!("✅ ACCEPTED seq={} hash={}", entry.sequence, &entry.entry_hash[..8]);
             
+            // Broadcast SSE event via TailBus (Postgres NOTIFY will also trigger via trigger)
+            state.tail_bus.notify(link.container_id.clone(), entry.sequence);
+            
             // Process projections if atom data was provided
-            if let Some(ref atom_data) = link.atom {
-                if let Some(event_type) = atom_data.get("type").and_then(|t| t.as_str()) {
+            if let Some(atom_data) = link.atom.clone() {
+                if let Some(event_type) = atom_data.get("type").and_then(|t| t.as_str()).map(|s| s.to_string()) {
                     let pool = state.pool.clone();
                     let container_id = link.container_id.clone();
                     let atom = atom_data.clone();
@@ -382,6 +387,7 @@ async fn route_commit(
                     // Process projection in background (non-blocking)
                     tokio::spawn(async move {
                         let tenant_id = "default"; // TODO: Extract from atom or session
+                        let event_type = event_type.as_str();
                         
                         if container_id == "C.Jobs" {
                             // Update main jobs projection
@@ -488,28 +494,7 @@ async fn route_commit(
     }
 }
 
-/// GET /ledger/:container_id/tail
-/// SSE stream with PostgreSQL LISTEN/NOTIFY (PR10)
-/// Supports Last-Event-ID header for reconnection (Gemini P2 #7)
-async fn route_tail(
-    State(state): State<AppState>,
-    Path(container_id): Path<String>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    // Parse Last-Event-ID for reconnection support
-    let last_event_id = headers
-        .get("Last-Event-ID")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<i64>().ok());
-    
-    if let Some(seq) = last_event_id {
-        info!("📡 SSE tail requested for: {} (resuming from seq {})", container_id, seq);
-    } else {
-        info!("📡 SSE tail requested for: {}", container_id);
-    }
-    
-    sse::sse_tail(state.pool.clone(), container_id, last_event_id).await
-}
+// SSE route is now handled by sse::router (simplified version)
 
 /// GET /atom/:hash
 /// Fetch atom data by hash (PHASE 3B)
@@ -615,10 +600,22 @@ async fn main() -> anyhow::Result<()> {
     }
     info!("📋 Policy engine initialized");
 
+    // Create TailBus for SSE (simplified - only cid:seq)
+    let tail_bus = sse::TailBus::new();
+    
+    // Postgres LISTEN/NOTIFY integration
+    // Note: sqlx doesn't have built-in async LISTEN/NOTIFY
+    // The trigger will send NOTIFY, but we'll also notify via TailBus directly in route_commit
+    // For full async LISTEN support, consider using tokio-postgres or pg_listen crate
+    info!("📡 PostgreSQL NOTIFY trigger 'ubl_tail' will be used (trigger created via migration)");
+
+    // Keep tail_tx for AppState compatibility, but also use TailBus
     let state = AppState {
         ledger: PgLedger::new(pool.clone()),
         pool: pool.clone(),
         policy_registry,
+        tail_tx: tail_bus.clone().tx.clone(),
+        tail_bus: tail_bus.clone(),
     };
 
     // Initialize WebAuthn
@@ -637,6 +634,9 @@ async fn main() -> anyhow::Result<()> {
         .rp_name("UBL Identity")
         .build()
         .expect("Failed to build WebAuthn");
+
+    // Clone webauthn before it gets moved into id_state
+    let webauthn_for_console = webauthn.clone();
 
     let id_state = id_routes::IdState { 
         pool: pool.clone(),
@@ -661,16 +661,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/state/:container_id", get(route_state))
         .route("/link/validate", post(route_validate))
         .route("/link/commit", post(route_commit))
-        .route("/ledger/:container_id/tail", get(route_tail))
         .route("/atom/:hash", get(route_atom))
-        .route("/metrics", get(metrics::metrics_handler))
         .with_state(state.clone())
+        .merge(metrics::metrics_router())
+        .merge(sse::sse_router(tail_bus.clone())) // SSE simplified (only cid:seq)
         .merge(id_routes::id_router().with_state(id_state))
         .merge(id_session_token::router().with_state(state.clone()))
         .merge(repo_routes::router().with_state(state.clone()))
         .nest("/query", projections::projection_router().with_state(projection_state))
         // Console v1.1 (ADR-001) — with step-up WebAuthn
-        .merge(console_v1::routes(pool.clone(), webauthn.clone()))
+        .merge(console_v1::routes(pool.clone(), webauthn_for_console))
         // Registry v1.1 (ADR-002)
         .merge(registry_v1::routes(pool.clone()))
         // Messenger v1 (C.Messenger boundary)
@@ -682,19 +682,64 @@ async fn main() -> anyhow::Result<()> {
         ))
         .layer(cors);
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let addr = format!("0.0.0.0:{}", port);
+    // Prompt 3: Unix Socket support - REQUIRED for security
+    if let Ok(unix_path) = std::env::var("UBL_LISTEN_UNIX") {
+        use std::path::Path;
+        use std::fs;
+        use hyper::server::conn::http1::Builder as Http1Builder;
+        use hyper_util::rt::TokioIo;
+        use tokio::net::UnixListener;
+        use tower_service::Service;
+        
+        let p = Path::new(&unix_path);
+        if let Some(dir) = p.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let _ = fs::remove_file(&p); // evita "address in use"
 
-    info!("🚀 UBL Server v2.1 — ADR-001 + ADR-002 Compliant");
-    info!("   Listening: http://{}", addr);
-    info!("   Database: {}", database_url.split('@').last().unwrap_or("postgres"));
-    info!("   Console v1.1: /v1/policy/permit, /v1/commands/issue, /v1/exec.finish");
-    info!("   Registry v1.1: /v1/query/registry/*");
-    info!("   Projections: /query/jobs, /query/conversations/:id/messages, /query/office/*");
-    info!("   Runner pulls from: GET /v1/query/commands?pending=1");
+        info!("🚀 UBL Server v2.1 — ADR-001 + ADR-002 Compliant");
+        info!("   Listening: unix://{}", unix_path);
+        info!("   Database: {}", database_url.split('@').last().unwrap_or("postgres"));
+        info!("   Console v1.1: /v1/policy/permit, /v1/commands/issue, /v1/exec.finish");
+        info!("   Registry v1.1: /v1/query/registry/*");
+        info!("   Projections: /query/jobs, /query/conversations/:id/messages, /query/office/*");
+        info!("   Runner pulls from: GET /v1/query/commands?pending=1");
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+        let listener = UnixListener::bind(p)?;
+        let mut make_service = app.into_make_service();
+        
+        loop {
+            let (stream, _) = listener.accept().await?;
+            let tower_service = make_service.call(()).await.expect("make_service");
+            
+            tokio::spawn(async move {
+                let io = TokioIo::new(stream);
+                
+                // Wrap tower service for hyper 1.x compatibility
+                let hyper_service = hyper_util::service::TowerToHyperService::new(tower_service);
+                
+                let http1 = Http1Builder::new();
+                
+                if let Err(e) = http1.serve_connection(io, hyper_service).await {
+                    error!("Error serving Unix Socket connection: {}", e);
+                }
+            });
+        }
+    } else {
+        let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+        let addr = format!("0.0.0.0:{}", port);
+
+        info!("🚀 UBL Server v2.1 — ADR-001 + ADR-002 Compliant");
+        info!("   Listening: http://{}", addr);
+        info!("   Database: {}", database_url.split('@').last().unwrap_or("postgres"));
+        info!("   Console v1.1: /v1/policy/permit, /v1/commands/issue, /v1/exec.finish");
+        info!("   Registry v1.1: /v1/query/registry/*");
+        info!("   Projections: /query/jobs, /query/conversations/:id/messages, /query/office/*");
+        info!("   Runner pulls from: GET /v1/query/commands?pending=1");
+
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(listener, app).await?;
+    }
     
     Ok(())
 }

@@ -156,7 +156,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           const otherEntity = otherParticipantId ? entities.find(e => e.id === otherParticipantId) : null;
           const presenceStatus = otherEntity?.status || 'offline';
           const isWorking = presenceStatus === 'working';
-          const isWaitingOnYou = presenceStatus === 'waiting_on_you';
+          const isWaitingOnYou = false; // TODO: Implement waiting_on_you status
 
           return (
             <div 

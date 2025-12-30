@@ -1,0 +1,26 @@
+{
+  "$id": "ubl://schemas/ws.test.request",
+  "type": "object",
+  "required": ["kind","tenant","workspace","repo","sha","suite"],
+  "properties": {
+    "kind": { "const": "ws/test/request" },
+    "tenant": { "type": "string", "minLength": 1 },
+    "workspace": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "minLength": 1 },
+    "sha": { "type": "string", "minLength": 8 },
+    "suite": { "type": "string", "minLength": 1 },
+    "limits": {
+      "type":"object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "type":"integer", "minimum":1 },
+        "mem_mb": { "type":"integer", "minimum":64 },
+        "timeout_sec": { "type":"integer", "minimum":10 },
+        "net": { "type":"boolean" }
+      }
+    }
+  },
+  "additionalProperties": false
+}
+
+

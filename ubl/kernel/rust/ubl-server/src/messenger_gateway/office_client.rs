@@ -108,6 +108,8 @@ pub struct IngestMessageResponse {
     pub reply_content: Option<String>,
     pub job_id: Option<String>,
     pub card: Option<serde_json::Value>, // JobCard JSON
+    #[serde(default)]
+    pub event_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

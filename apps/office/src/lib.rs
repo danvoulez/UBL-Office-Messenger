@@ -67,6 +67,39 @@ pub mod job_executor;
 pub mod audit;
 pub mod middleware;
 pub mod observability;
+pub mod types;
+pub mod asc;
+pub mod routes;
+pub mod http_unix;
+
+// Builder function for tests (Prompt 2: Office integration tests)
+use axum::Router;
+use axum::routing::get;
+use std::sync::Arc;
+
+/// Create a simple Office router for testing
+/// This is a minimal router that only includes the workspace/deploy routes
+pub fn app(ubl_base: String) -> Router {
+    let ubl_client = Arc::new(crate::ubl_client::UblClient::with_generated_key(
+        &ubl_base,
+        "test",
+        30000,
+    ));
+    
+    let ws_router = routes::ws::router(routes::ws::OfficeState {
+        ubl_base: ubl_base.clone(),
+        ubl_client: ubl_client.clone(),
+    });
+    let deploy_router = routes::deploy::router(routes::deploy::OfficeState {
+        ubl_base,
+        ubl_client,
+    });
+
+    Router::new()
+        .merge(ws_router)
+        .merge(deploy_router)
+        .route("/health", get(|| async { axum::Json(serde_json::json!({"ok":true})) }))
+}
 
 // Re-exports for convenience
 pub use entity::{Entity, EntityId, Instance, Guardian};
@@ -187,7 +220,7 @@ impl Default for OfficeConfig {
                 cors_origins: vec!["*".to_string()],
             },
             ubl: UblConfig {
-                endpoint: "http://localhost:3000".to_string(),
+                endpoint: "http://localhost:8080".to_string(),
                 container_id: "office".to_string(),
                 timeout_ms: 30000,
             },

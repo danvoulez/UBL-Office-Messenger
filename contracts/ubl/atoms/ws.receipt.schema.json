@@ -1,0 +1,20 @@
+{
+  "$id":"ubl://schemas/ws.receipt",
+  "type":"object",
+  "required":["kind","tenant","workspace","trigger","exit_code","duration_ms"],
+  "properties":{
+    "kind":{"const":"ws/receipt"},
+    "tenant":{"type":"string"},
+    "workspace":{"type":"string"},
+    "trigger":{"type":"string"},
+    "exit_code":{"type":"integer"},
+    "duration_ms":{"type":"integer"},
+    "stdout_hash":{"type":"string"},
+    "stderr_hash":{"type":"string"},
+    "artifacts":{"type":"array","items":{"type":"object","required":["name","hash"],"properties":{"name":{"type":"string"},"hash":{"type":"string"}}}},
+    "toolchain":{"type":"object","additionalProperties":true}
+  },
+  "additionalProperties": false
+}
+
+

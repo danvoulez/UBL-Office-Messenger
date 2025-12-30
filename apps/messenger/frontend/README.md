@@ -1,20 +1,31 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# UBL Messenger Frontend
 
-# Run and deploy your AI Studio app
+A high-fidelity messenger frontend for the UBL Foundation system.
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/drive/1qY0HMjgTOcIU6RGr0mU9-uo6vTr0oyMz
+- Node.js 18+
+- UBL Kernel running on port 8080
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
-
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+   ```bash
+   npm install
+   ```
+
+2. Configure the API endpoint in [.env.local](.env.local):
+   ```
+   VITE_API_BASE_URL=http://localhost:8080
+   ```
+
 3. Run the app:
-   `npm run dev`
+   ```bash
+   npm run dev
+   ```
+
+4. Open http://localhost:3000 in your browser
+
+## Authentication
+
+This app uses WebAuthn passkeys for authentication via the UBL Kernel identity service.

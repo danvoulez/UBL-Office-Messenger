@@ -1,7 +1,7 @@
 # UBL Server Dockerfile
 # Multi-stage build for minimal image
 
-# Stage 1: Build
+# Stage 1: Build (using Alpine for musl-compatible binary)
 FROM rust:1.75-alpine AS builder
 
 RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig
@@ -33,8 +33,8 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /build/target/release/ubl-server /app/ubl-server
 
-# Copy migrations if needed
-COPY ubl-server/migrations /app/migrations
+# Copy migrations if needed (commented out - migrations directory not found)
+# COPY ubl-server/migrations /app/migrations
 
 EXPOSE 8080
 
@@ -42,6 +42,7 @@ ENV HOST=0.0.0.0
 ENV PORT=8080
 
 CMD ["/app/ubl-server"]
+
 
 
 

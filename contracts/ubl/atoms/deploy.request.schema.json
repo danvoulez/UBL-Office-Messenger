@@ -1,0 +1,17 @@
+{
+  "$id":"ubl://schemas/deploy.request",
+  "type":"object",
+  "required":["kind","tenant","app","env","image_digest","strategy"],
+  "properties":{
+    "kind":{"const":"deploy/request"},
+    "tenant":{"type":"string"},
+    "app":{"type":"string"},
+    "env":{"type":"string","enum":["dev","stg","prod"]},
+    "image_digest":{"type":"string","minLength":10},
+    "strategy":{"type":"string","enum":["canary","blue-green","rolling"]},
+    "desired_replicas":{"type":"integer","minimum":1}
+  },
+  "additionalProperties": false
+}
+
+

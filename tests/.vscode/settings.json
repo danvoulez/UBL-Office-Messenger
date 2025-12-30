@@ -1,0 +1,12 @@
+{
+  "docker.showStartPage": false,
+  "docker.defaultRegistryPath": "",
+  "docker.compose.build.enabled": true,
+  "docker.compose.down.removeVolumes": true,
+  "docker.compose.down.removeOrphans": true,
+  "files.exclude": {
+    "**/.DS_Store": true
+  }
+}
+
+

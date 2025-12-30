@@ -79,7 +79,7 @@ struct PostMessageRequest {
     idempotency_key: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PostMessageResponse {
     message_id: String,
     hash: String,
@@ -96,7 +96,7 @@ struct JobActionRequest {
     idempotency_key: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct JobActionResponse {
     success: bool,
     event_ids: Vec<String>,
@@ -191,6 +191,7 @@ async fn post_message(
             container_id: container_id.to_string(),
             sequence: 0,
             entry_hash: "0x00".to_string(),
+            previous_hash: "0x00".to_string(),
             link_hash: "0x00".to_string(),
             ts_unix_ms: 0,
         });
@@ -378,7 +379,7 @@ async fn get_job(
     // Get owner entity info
     let owner_entity = sqlx::query!(
         r#"
-        SELECT id, display_name, kind
+        SELECT sid, display_name, kind
         FROM id_subjects
         WHERE sid = $1
         "#,
@@ -388,7 +389,7 @@ async fn get_job(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map(|r| serde_json::json!({
-        "entity_id": r.id,
+        "entity_id": r.sid,
         "display_name": r.display_name,
         "kind": r.kind,
     }))
@@ -400,7 +401,8 @@ async fn get_job(
     
     // Parse available_actions
     let available_actions: Vec<serde_json::Value> = job_row.available_actions
-        .as_array()
+        .as_ref()
+        .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     

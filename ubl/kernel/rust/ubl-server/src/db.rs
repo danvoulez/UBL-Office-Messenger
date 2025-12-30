@@ -3,8 +3,24 @@
 
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use time::OffsetDateTime;
+
+// Helper trait for getting columns by name (local to this module to avoid conflicts)
+trait DbRowExt {
+    fn get_col<T>(&self, col: &str) -> T 
+    where
+        T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>;
+}
+
+impl DbRowExt for sqlx::postgres::PgRow {
+    fn get_col<T>(&self, col: &str) -> T 
+    where
+        T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+    {
+        sqlx::Row::get(self, col)
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct LinkDraft {
@@ -27,14 +43,14 @@ pub struct LinkDraft {
 }
 
 /// Pact proof in link draft
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PactProofDraft {
     pub pact_id: String,
     pub signatures: Vec<PactSignatureDraft>,
 }
 
 /// Signature in pact proof
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PactSignatureDraft {
     pub signer: String,
     pub signature: String,
@@ -85,7 +101,7 @@ impl PgLedger {
             .expect("serializable");
 
         // Lock and get latest entry (FOR UPDATE)
-        let rec = sqlx::query!(
+        let rec: Option<sqlx::postgres::PgRow> = sqlx::query(
             r#"
             SELECT sequence, entry_hash
             FROM ledger_entry
@@ -94,14 +110,18 @@ impl PgLedger {
             LIMIT 1
             FOR UPDATE
             "#,
-            link.container_id
         )
+        .bind(&link.container_id)
         .fetch_optional(&mut *tx)
         .await
         .expect("select last");
 
         let (expected_prev, expected_seq) = match rec {
-            Some(r) => (r.entry_hash, r.sequence + 1),
+            Some(r) => {
+                let entry_hash: String = r.get_col("entry_hash");
+                let sequence: i64 = r.get_col("sequence");
+                (entry_hash, sequence + 1)
+            },
             None => ("0x00".to_string(), 1),
         };
 
@@ -126,42 +146,44 @@ impl PgLedger {
         let mut h = Hasher::new();
         h.update(b"ubl:ledger\n"); // Domain tag per SPEC-UBL-LEDGER v1.0 §5.1
         h.update(link.container_id.as_bytes());
-        h.update(&expected_seq.to_be_bytes()); // Big-endian per spec
+        let seq_bytes: [u8; 8] = expected_seq.to_be_bytes();
+        h.update(&seq_bytes); // Big-endian per spec
         h.update(link.atom_hash.as_bytes()); // link_hash = atom_hash reference
         h.update(expected_prev.as_bytes());
-        h.update(&ts_unix_ms.to_be_bytes()); // Big-endian for consistency
+        let ts_bytes: [u8; 8] = ts_unix_ms.to_be_bytes();
+        h.update(&ts_bytes); // Big-endian for consistency
         let entry_hash = hex::encode(h.finalize().as_bytes());
 
         // Insert new entry (SPEC-UBL-LEDGER v1.0 §7.1 - Append-only)
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO ledger_entry (container_id, sequence, link_hash, previous_hash, entry_hash, ts_unix_ms, metadata)
             VALUES ($1, $2, $3, $4, $5, $6, '{}'::jsonb)
             "#,
-            link.container_id,
-            expected_seq,
-            link.atom_hash,
-            expected_prev,
-            entry_hash,
-            ts_unix_ms
         )
+        .bind(&link.container_id)
+        .bind(expected_seq)
+        .bind(&link.atom_hash)
+        .bind(&expected_prev)
+        .bind(&entry_hash)
+        .bind(ts_unix_ms)
         .execute(&mut *tx)
         .await
         .expect("insert");
 
         // Store atom data for projections (if provided)
         if let Some(ref atom_data) = link.atom {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO ledger_atom (atom_hash, container_id, atom_data, ts_unix_ms)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (atom_hash) DO NOTHING
                 "#,
-                link.atom_hash,
-                link.container_id,
-                atom_data,
-                ts_unix_ms
             )
+            .bind(&link.atom_hash)
+            .bind(&link.container_id)
+            .bind(atom_data)
+            .bind(ts_unix_ms)
             .execute(&mut *tx)
             .await
             .expect("insert atom");
@@ -182,7 +204,7 @@ impl PgLedger {
 
     /// Get current state of container
     pub async fn get_state(&self, container_id: &str) -> Result<LedgerEntry, sqlx::Error> {
-        let rec = sqlx::query!(
+        let rec: Option<sqlx::postgres::PgRow> = sqlx::query(
             r#"
             SELECT sequence, link_hash, previous_hash, entry_hash, ts_unix_ms
             FROM ledger_entry
@@ -190,18 +212,21 @@ impl PgLedger {
             ORDER BY sequence DESC
             LIMIT 1
             "#,
-            container_id
         )
-        .fetch_one(&self.pool)
+        .bind(container_id)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(LedgerEntry {
-            container_id: container_id.to_string(),
-            sequence: rec.sequence,
-            link_hash: rec.link_hash,
-            previous_hash: rec.previous_hash,
-            entry_hash: rec.entry_hash,
-            ts_unix_ms: rec.ts_unix_ms,
-        })
+        match rec {
+            Some(r) => Ok(LedgerEntry {
+                container_id: container_id.to_string(),
+                sequence: r.get_col("sequence"),
+                link_hash: r.get_col("link_hash"),
+                previous_hash: r.get_col("previous_hash"),
+                entry_hash: r.get_col("entry_hash"),
+                ts_unix_ms: r.get_col("ts_unix_ms"),
+            }),
+            None => Err(sqlx::Error::RowNotFound),
+        }
     }
 }

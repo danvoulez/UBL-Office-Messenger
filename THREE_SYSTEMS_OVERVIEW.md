@@ -101,12 +101,13 @@ Located in `ubl/containers/`:
 
 #### Database Schema
 Located in `ubl/sql/`:
-- `001_ledger.sql` - Core ledger tables
-- `040_messenger_v1.sql` - Messenger projections
-- `041_messenger_projections_complete.sql` - Enhanced projections (new)
-- `050_jobs_v1.sql` - Job projections
-- `060_office_v1.sql` - Office projections
-- `070_policy_v1.sql` - Policy engine
+- `00_base/000_core.sql` - Core ledger tables
+- `00_base/001_identity.sql` - Identity & WebAuthn
+- `00_base/002_policy.sql` - Policy engine
+- `00_base/003_triggers.sql` - NOTIFY triggers
+- `10_projections/100_console.sql` - Console projections
+- `10_projections/101_messenger.sql` - Messenger projections
+- `10_projections/102_office.sql` - Office projections
 
 #### Key Features
 - **Append-only**: Records cannot be modified or deleted
@@ -561,12 +562,14 @@ npm run dev
 # Create database
 createdb ubl_ledger
 
-# Apply migrations
-psql ubl_ledger -f ubl/sql/000_unified.sql
-psql ubl_ledger -f ubl/sql/040_messenger_v1.sql
-psql ubl_ledger -f ubl/sql/041_messenger_projections_complete.sql
-psql ubl_ledger -f ubl/sql/050_jobs_v1.sql
-psql ubl_ledger -f ubl/sql/060_office_v1.sql
+# Apply migrations (in order)
+psql ubl_ledger -f ubl/sql/00_base/000_core.sql
+psql ubl_ledger -f ubl/sql/00_base/001_identity.sql
+psql ubl_ledger -f ubl/sql/00_base/002_policy.sql
+psql ubl_ledger -f ubl/sql/00_base/003_triggers.sql
+psql ubl_ledger -f ubl/sql/10_projections/100_console.sql
+psql ubl_ledger -f ubl/sql/10_projections/101_messenger.sql
+psql ubl_ledger -f ubl/sql/10_projections/102_office.sql
 ```
 
 ---
@@ -2523,7 +2526,7 @@ export function useSSE(
 
 ## Database Schema Details
 
-### Enhanced Projections (041_messenger_projections_complete.sql)
+### Enhanced Projections (10_projections/101_messenger.sql)
 
 **projection_jobs:**
 - Enhanced with `waiting_on[]`, `available_actions JSONB`
@@ -2806,13 +2809,14 @@ Frontend
 # Create database
 createdb ubl_ledger
 
-# Apply migrations in order
-psql ubl_ledger -f ubl/sql/000_unified.sql
-psql ubl_ledger -f ubl/sql/040_messenger_v1.sql
-psql ubl_ledger -f ubl/sql/041_messenger_projections_complete.sql
-psql ubl_ledger -f ubl/sql/050_jobs_v1.sql
-psql ubl_ledger -f ubl/sql/060_office_v1.sql
-psql ubl_ledger -f ubl/sql/070_policy_v1.sql
+# Apply migrations in order (see ubl/sql/MIGRATION_ORDER.txt)
+psql ubl_ledger -f ubl/sql/00_base/000_core.sql
+psql ubl_ledger -f ubl/sql/00_base/001_identity.sql
+psql ubl_ledger -f ubl/sql/00_base/002_policy.sql
+psql ubl_ledger -f ubl/sql/00_base/003_triggers.sql
+psql ubl_ledger -f ubl/sql/10_projections/100_console.sql
+psql ubl_ledger -f ubl/sql/10_projections/101_messenger.sql
+psql ubl_ledger -f ubl/sql/10_projections/102_office.sql
 ```
 
 ### Environment Variables

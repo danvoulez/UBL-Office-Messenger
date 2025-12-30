@@ -1,0 +1,9 @@
+00_base/000_core.sql
+00_base/001_identity.sql
+00_base/002_policy.sql
+00_base/003_triggers.sql
+10_projections/100_console.sql
+10_projections/101_messenger.sql
+10_projections/102_office.sql
+90_ops/900_disaster_recovery.sql
+

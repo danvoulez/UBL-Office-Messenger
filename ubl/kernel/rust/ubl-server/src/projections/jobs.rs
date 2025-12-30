@@ -98,7 +98,7 @@ impl JobsProjection {
         let estimated_duration = atom["estimated_duration_seconds"].as_i64().map(|v| v as i32);
         let estimated_value = atom["estimated_value"].as_f64();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO projection_jobs (
                 job_id, conversation_id, title, description, status, priority,
@@ -112,20 +112,20 @@ impl JobsProjection {
                 assigned_to = EXCLUDED.assigned_to,
                 last_event_hash = EXCLUDED.last_event_hash,
                 last_event_seq = EXCLUDED.last_event_seq
-            "#,
-            job_id,
-            conversation_id,
-            title,
-            description,
-            priority,
-            assigned_to,
-            created_by,
-            created_at,
-            estimated_duration,
-            estimated_value,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(conversation_id)
+        .bind(title)
+        .bind(description)
+        .bind(priority)
+        .bind(assigned_to)
+        .bind(created_by)
+        .bind(created_at)
+        .bind(estimated_duration)
+        .bind(estimated_value)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -145,35 +145,35 @@ impl JobsProjection {
         let now = time::OffsetDateTime::now_utc();
 
         // Update old table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'running', started_at = $2::timestamptz,
                 last_event_hash = $3, last_event_seq = $4
             WHERE job_id = $1
-            "#,
-            job_id,
-            started_at,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(started_at)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await;
 
         // Update new table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'in_progress', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
             WHERE tenant_id = $5 AND job_id = $1
-            "#,
-            job_id,
-            now,
-            entry_hash,
-            sequence,
-            tenant_id
+            "#
         )
+        .bind(job_id)
+        .bind(now)
+        .bind(entry_hash)
+        .bind(sequence)
+        .bind(tenant_id)
         .execute(&self.pool)
         .await;
 
@@ -191,19 +191,19 @@ impl JobsProjection {
         let progress = atom["progress"].as_i64().unwrap_or(0) as i32;
         let message = atom["message"].as_str();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE projection_jobs
             SET progress = $2, progress_message = $3,
                 last_event_hash = $4, last_event_seq = $5
             WHERE job_id = $1
-            "#,
-            job_id,
-            progress,
-            message,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(progress)
+        .bind(message)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -225,38 +225,38 @@ impl JobsProjection {
         let now = time::OffsetDateTime::now_utc();
 
         // Update old table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'completed', completed_at = $2::timestamptz,
                 progress = 100, result_summary = $3, result_artifacts = $4,
                 last_event_hash = $5, last_event_seq = $6
             WHERE job_id = $1
-            "#,
-            job_id,
-            completed_at,
-            summary,
-            artifacts,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(completed_at)
+        .bind(summary)
+        .bind(artifacts)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await;
 
         // Update new table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'completed', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
             WHERE tenant_id = $5 AND job_id = $1
-            "#,
-            job_id,
-            now,
-            entry_hash,
-            sequence,
-            tenant_id
+            "#
         )
+        .bind(job_id)
+        .bind(now)
+        .bind(entry_hash)
+        .bind(sequence)
+        .bind(tenant_id)
         .execute(&self.pool)
         .await;
 
@@ -276,35 +276,35 @@ impl JobsProjection {
         let now = time::OffsetDateTime::now_utc();
 
         // Update old table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'cancelled', cancelled_at = $2::timestamptz,
                 last_event_hash = $3, last_event_seq = $4
             WHERE job_id = $1
-            "#,
-            job_id,
-            cancelled_at,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(cancelled_at)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await;
 
         // Update new table
-        let _ = sqlx::query!(
+        let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'cancelled', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
             WHERE tenant_id = $5 AND job_id = $1
-            "#,
-            job_id,
-            now,
-            entry_hash,
-            sequence,
-            tenant_id
+            "#
         )
+        .bind(job_id)
+        .bind(now)
+        .bind(entry_hash)
+        .bind(sequence)
+        .bind(tenant_id)
         .execute(&self.pool)
         .await;
 
@@ -325,38 +325,38 @@ impl JobsProjection {
         let requested_by = atom["requested_by"].as_str().unwrap_or_default();
         let requested_at = atom["requested_at"].as_str().unwrap_or_default();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO projection_approvals (
                 approval_id, job_id, action, reason, requested_by, requested_at,
                 status, last_event_hash, last_event_seq
             ) VALUES ($1, $2, $3, $4, $5, $6::timestamptz, 'pending', $7, $8)
             ON CONFLICT (approval_id) DO NOTHING
-            "#,
-            approval_id,
-            job_id,
-            action,
-            reason,
-            requested_by,
-            requested_at,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(approval_id)
+        .bind(job_id)
+        .bind(action)
+        .bind(reason)
+        .bind(requested_by)
+        .bind(requested_at)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
         // Update job status
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'awaiting_approval',
                 last_event_hash = $2, last_event_seq = $3
             WHERE job_id = $1
-            "#,
-            job_id,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(job_id)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -376,23 +376,23 @@ impl JobsProjection {
         let decision = atom["decision"].as_str().unwrap_or_default();
         let decision_reason = atom["reason"].as_str();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE projection_approvals
             SET status = $2, decided_by = $3, decided_at = $4::timestamptz,
                 decision = $5, decision_reason = $6,
                 last_event_hash = $7, last_event_seq = $8
             WHERE approval_id = $1
-            "#,
-            approval_id,
-            decision,
-            decided_by,
-            decided_at,
-            decision,
-            decision_reason,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(approval_id)
+        .bind(decision)
+        .bind(decided_by)
+        .bind(decided_at)
+        .bind(decision)
+        .bind(decision_reason)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -400,7 +400,7 @@ impl JobsProjection {
         // If rejected, update to cancelled
         let new_status = if decision == "approved" { "running" } else { "rejected" };
         
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = $3, last_event_hash = $4, last_event_seq = $5
@@ -408,13 +408,13 @@ impl JobsProjection {
             WHERE projection_jobs.job_id = projection_approvals.job_id
               AND projection_approvals.approval_id = $1
               AND ($2 = 'approved' OR $2 = 'rejected')
-            "#,
-            approval_id,
-            decision,
-            new_status,
-            entry_hash,
-            sequence
+            "#
         )
+        .bind(approval_id)
+        .bind(decision)
+        .bind(new_status)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
@@ -424,41 +424,51 @@ impl JobsProjection {
 
     /// Query jobs by conversation
     pub async fn get_jobs_by_conversation(&self, conversation_id: &str) -> Result<Vec<Job>, sqlx::Error> {
-        sqlx::query_as!(
-            Job,
+        sqlx::query_as::<_, Job>(
             r#"
-            SELECT job_id, conversation_id, title, description, status, priority,
-                   assigned_to, created_by, created_at, started_at, completed_at,
+            SELECT job_id, conversation_id, 
+                   COALESCE(title, '') as title, 
+                   COALESCE(description, '') as description, 
+                   COALESCE(status, 'pending') as status, 
+                   COALESCE(priority, 'normal') as priority,
+                   assigned_to, 
+                   COALESCE(created_by, '') as created_by, 
+                   created_at, started_at, completed_at,
                    cancelled_at, progress, progress_message, result_summary,
                    result_artifacts, estimated_duration_seconds,
-                   estimated_value as "estimated_value: f64",
+                   estimated_value,
                    last_event_hash, last_event_seq
             FROM projection_jobs
             WHERE conversation_id = $1
             ORDER BY created_at DESC
-            "#,
-            conversation_id
+            "#
         )
+        .bind(conversation_id)
         .fetch_all(&self.pool)
         .await
     }
 
     /// Query job by ID
     pub async fn get_job(&self, job_id: &str) -> Result<Option<Job>, sqlx::Error> {
-        sqlx::query_as!(
-            Job,
+        sqlx::query_as::<_, Job>(
             r#"
-            SELECT job_id, conversation_id, title, description, status, priority,
-                   assigned_to, created_by, created_at, started_at, completed_at,
+            SELECT job_id, conversation_id, 
+                   COALESCE(title, '') as title, 
+                   COALESCE(description, '') as description, 
+                   COALESCE(status, 'pending') as status, 
+                   COALESCE(priority, 'normal') as priority,
+                   assigned_to, 
+                   COALESCE(created_by, '') as created_by, 
+                   created_at, started_at, completed_at,
                    cancelled_at, progress, progress_message, result_summary,
                    result_artifacts, estimated_duration_seconds,
-                   estimated_value as "estimated_value: f64",
+                   estimated_value,
                    last_event_hash, last_event_seq
             FROM projection_jobs
             WHERE job_id = $1
-            "#,
-            job_id
+            "#
         )
+        .bind(job_id)
         .fetch_optional(&self.pool)
         .await
     }

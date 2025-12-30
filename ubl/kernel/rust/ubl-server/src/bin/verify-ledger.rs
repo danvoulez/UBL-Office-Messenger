@@ -8,10 +8,10 @@
 //! Usage: cargo run --bin verify-ledger [-- --container <container_id>]
 
 use blake3::Hasher;
-use sqlx::PgPool;
+use sqlx::{PgPool, FromRow};
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, FromRow)]
 struct LedgerEntry {
     container_id: String,
     sequence: i64,
@@ -30,16 +30,15 @@ struct VerificationResult {
 }
 
 async fn verify_container(pool: &PgPool, container_id: &str) -> VerificationResult {
-    let entries: Vec<LedgerEntry> = sqlx::query_as!(
-        LedgerEntry,
+    let entries: Vec<LedgerEntry> = sqlx::query_as::<_, LedgerEntry>(
         r#"
         SELECT container_id, sequence, link_hash, previous_hash, entry_hash, ts_unix_ms
         FROM ledger_entry
         WHERE container_id = $1
         ORDER BY sequence ASC
         "#,
-        container_id
     )
+    .bind(container_id)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
@@ -181,6 +180,7 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 }
+
 
 
 

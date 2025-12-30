@@ -18,7 +18,12 @@ path = "src/bin/verify-ledger.rs"
 axum = { version = "0.7", features = ["macros", "json", "tokio"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
+# Unix Socket support
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full", "tokio"] }
+async-stream = "0.3"
 tower = "0.5"
+tower-service = "0.3"
 tower-http = { workspace = true }
 futures-util = "0.3"
 
@@ -44,13 +49,12 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# OpenTelemetry - Distributed tracing
-# Note: opentelemetry-otlp 0.14 requires opentelemetry_sdk 0.20
-opentelemetry = "0.20"
-opentelemetry-otlp = "0.14"
-opentelemetry_sdk = { version = "0.20", features = ["rt-tokio"] }
-opentelemetry-semantic-conventions = "0.12"
-tracing-opentelemetry = "0.20"
+# OpenTelemetry - Distributed tracing (optional)
+opentelemetry = { version = "0.20", optional = true }
+opentelemetry-otlp = { version = "0.14", optional = true }
+opentelemetry_sdk = { version = "0.20", features = ["rt-tokio"], optional = true }
+opentelemetry-semantic-conventions = { version = "0.12", optional = true }
+tracing-opentelemetry = { version = "0.20", optional = true }
 
 # Database
 sqlx = { workspace = true }
@@ -84,3 +88,6 @@ ubl-kernel = { path = "../ubl-kernel" }
 ubl-atom = { path = "../ubl-atom" }
 ubl-policy-vm = { path = "../ubl-policy-vm" }
 
+[features]
+default = []
+tracing = ["opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "opentelemetry-semantic-conventions", "tracing-opentelemetry"]

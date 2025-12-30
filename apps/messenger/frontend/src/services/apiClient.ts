@@ -5,7 +5,7 @@ export type ApiErrorShape = {
   details?: any;
 };
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   // Check localStorage first (set by BridgeConfig)
   const storedUrl = localStorage.getItem('ubl_api_base_url');
   if (storedUrl) {

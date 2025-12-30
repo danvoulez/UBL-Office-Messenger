@@ -118,7 +118,12 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ublApi
       .createConversation({ participants: allParticipants, name, isGroup })
       .then((created) => {
-        setConversations(prev => prev.map(c => (c.id === tempId ? created : c)));
+        // API returns { id, hash }, merge with optimistic conversation data
+        const fullConversation: Conversation = {
+          ...optimistic,
+          id: created.id,
+        };
+        setConversations(prev => prev.map(c => (c.id === tempId ? fullConversation : c)));
         setActiveConvId(created.id);
       })
       .catch((e: any) => {
@@ -164,20 +169,22 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       const res = await ublApi.sendMessage({ conversationId: activeConvId, content: sanitized, type });
-      // Replace optimistic with backend messages
+      // Update optimistic message with backend response
       setMessages(prev => {
         const without = prev.filter(m => m.id !== optimisticId);
-        return [...without, ...res.messages];
+        const confirmed: Message = {
+          ...optimistic,
+          id: res.messageId,
+          hash: res.hash,
+          status: 'sent',
+        };
+        return [...without, confirmed];
       });
 
-      if (res.conversation) {
-        setConversations(prev => prev.map(c => (c.id === res.conversation!.id ? res.conversation! : c)));
-      } else {
-        // Best-effort local lastMessage update
-        setConversations(prev => prev.map(c => (c.id === activeConvId ? { ...c, lastMessage: sanitized } : c)));
-      }
+      // Best-effort local lastMessage update
+      setConversations(prev => prev.map(c => (c.id === activeConvId ? { ...c, lastMessage: sanitized } : c)));
 
-      (res.ledgerLogs || []).forEach((l) => eventBus.emit(PROTOCOL_EVENTS.BLOCK_MINED, l));
+      eventBus.emit(PROTOCOL_EVENTS.MESSAGE_SENT, { messageId: res.messageId, hash: res.hash });
     } catch (e: any) {
       console.error('[ProtocolContext] sendMessage failed', e);
       setMessages(prev => prev.map(m => (m.id === optimisticId ? { ...m, status: 'failed', error: e.message } : m)));

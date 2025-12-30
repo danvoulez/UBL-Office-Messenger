@@ -392,6 +392,135 @@ export const ublApi = {
       artifacts: res.artifacts,
     };
   },
-};
 
-export default ublApi;
+  // ============================================================================
+  // Onboarding/Tenant API (stubs)
+  // ============================================================================
+
+  /**
+   * Provision a new tenant
+   */
+  async provisionTenant(name: string, domain: string): Promise<{
+    id: string;
+    name: string;
+    domain: string;
+    tier: 'free' | 'enterprise' | 'sovereign';
+    createdAt: Date;
+    inviteCode: string;
+  }> {
+    // TODO: Implement when tenant provisioning endpoint exists
+    console.log('Provision tenant:', name, domain);
+    return {
+      id: `tenant_${Date.now()}`,
+      name,
+      domain,
+      tier: 'free',
+      createdAt: new Date(),
+      inviteCode: Math.random().toString(36).substring(2, 10).toUpperCase(),
+    };
+  },
+
+  /**
+   * Join an existing tenant via invite code
+   */
+  async joinTenant(inviteCode: string): Promise<{
+    id: string;
+    name: string;
+    domain: string;
+    tier: 'free' | 'enterprise' | 'sovereign';
+    createdAt: Date;
+    inviteCode: string;
+  }> {
+    // TODO: Implement when tenant join endpoint exists
+    console.log('Join tenant with code:', inviteCode);
+    return {
+      id: `tenant_${Date.now()}`,
+      name: 'Joined Tenant',
+      domain: 'joined.example.com',
+      tier: 'free',
+      createdAt: new Date(),
+      inviteCode,
+    };
+  },
+
+  /**
+   * Create a session for a tenant
+   */
+  async createSession(input: { tenantId: string; user: any }): Promise<{
+    user: Entity;
+    tenant: any;
+    token: string;
+  }> {
+    // TODO: Implement when session endpoint exists
+    console.log('Create session:', input);
+    return {
+      user: {
+        id: input.user.id || `user_${Date.now()}`,
+        name: input.user.name || 'New User',
+        avatar: `https://api.dicebear.com/7.x/notionists/svg?seed=${Date.now()}`,
+        type: 'human',
+        status: 'online',
+      },
+      tenant: { id: input.tenantId },
+      token: `token_${Date.now()}`,
+    };
+  },
+
+  /**
+   * Update current user
+   */
+  async updateMe(patch: Partial<Entity>): Promise<Entity> {
+    // TODO: Implement when update endpoint exists
+    console.log('Update me:', patch);
+    return {
+      id: 'current_user',
+      name: patch.name || 'User',
+      avatar: patch.avatar || `https://api.dicebear.com/7.x/notionists/svg?seed=user`,
+      type: 'human',
+      status: 'online',
+      ...patch,
+    } as Entity;
+  },
+
+  /**
+   * Create an entity
+   */
+  async createEntity(entity: Partial<Entity>): Promise<Entity> {
+    // TODO: Implement when entity creation endpoint exists
+    console.log('Create entity:', entity);
+    return {
+      id: `entity_${Date.now()}`,
+      name: entity.name || 'New Entity',
+      avatar: entity.avatar || `https://api.dicebear.com/7.x/notionists/svg?seed=${Date.now()}`,
+      type: entity.type || 'human',
+      status: 'online',
+      ...entity,
+    } as Entity;
+  },
+
+  /**
+   * Pin an asset to a conversation
+   */
+  async pinAsset(input: { conversationId: string; asset: any }): Promise<Conversation> {
+    // TODO: Implement when pin endpoint exists
+    console.log('Pin asset:', input);
+    return {
+      id: input.conversationId,
+      participants: [],
+      isGroup: false,
+    };
+  },
+
+  /**
+   * Unpin an asset from a conversation
+   */
+  async unpinAsset(input: { conversationId: string; assetId: string }): Promise<Conversation> {
+    // TODO: Implement when unpin endpoint exists
+    console.log('Unpin asset:', input);
+    return {
+      id: input.conversationId,
+      participants: [],
+      isGroup: false,
+    };
+  },
+};

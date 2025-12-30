@@ -57,6 +57,27 @@ pub struct Ledger {
 /// Genesis hash constant
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+/// Compute entry_hash deterministically (server-side only)
+/// 
+/// Per SPEC-UBL-LEDGER v1.0: entry_hash is computed by the server, never accepted from client.
+/// Formula: BLAKE3(container_id || sequence || link_hash || previous_hash || ts_unix_ms)
+pub fn compute_entry_hash(
+    container_id: &str,
+    sequence: u64,
+    link_hash: &str,
+    previous_hash: &str,
+    ts_unix_ms: i128,
+) -> String {
+    use blake3::Hasher;
+    let mut h = Hasher::new();
+    h.update(container_id.as_bytes());
+    h.update(&sequence.to_be_bytes());
+    h.update(link_hash.as_bytes());
+    h.update(previous_hash.as_bytes());
+    h.update(&ts_unix_ms.to_be_bytes());
+    hex::encode(h.finalize().as_bytes())
+}
+
 impl Ledger {
     /// Create a new ledger for a container
     pub fn new(container_id: String) -> Self {

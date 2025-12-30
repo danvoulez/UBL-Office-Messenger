@@ -23,6 +23,10 @@ serde_json = "1"
 
 # HTTP Client
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+# Unix Socket support - hyperlocal 0.8 requires hyper 0.14
+hyper = { version = "0.14", features = ["full", "client", "http1", "tcp"] }
+hyperlocal = "0.8"
+http-body-util = "0.1"
 
 # Cryptography
 ed25519-dalek = { version = "2", features = ["serde", "rand_core"] }
@@ -33,6 +37,10 @@ hex = "0.4"
 # UBL Core (for proper signing and atom canonicalization)
 ubl-kernel = { path = "../../ubl/kernel/rust/ubl-kernel" }
 ubl-atom = { path = "../../ubl/kernel/rust/ubl-atom" }
+ubl-link = { path = "../../ubl/kernel/rust/ubl-link" }
+
+# URL encoding
+urlencoding = "2"
 
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
@@ -50,14 +58,6 @@ anyhow = "1"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
-# OpenTelemetry - Distributed tracing
-# Note: opentelemetry-otlp 0.14 requires opentelemetry_sdk 0.20
-opentelemetry = "0.20"
-opentelemetry-otlp = "0.14"
-opentelemetry_sdk = { version = "0.20", features = ["rt-tokio"] }
-opentelemetry-semantic-conventions = "0.12"
-tracing-opentelemetry = "0.20"
 
 # Metrics
 prometheus = "0.13"
@@ -84,6 +84,11 @@ governor = "0.6"
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+axum = "0.7"
+hyper = { version = "0.14", features = ["server", "client"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1"
 
 [features]
 default = []

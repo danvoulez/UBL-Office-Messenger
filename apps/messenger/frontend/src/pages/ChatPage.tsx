@@ -36,6 +36,7 @@ export const ChatPage: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isNewWorkstreamOpen, setIsNewWorkstreamOpen] = useState(false);
   const [inspectingEntity, setInspectingEntity] = useState<Entity | null>(null);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
 
   // Current user entity
   const currentUser: Entity = {

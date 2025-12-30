@@ -34,20 +34,23 @@ psql -d ubl_ledger -c "SELECT 1"
 ## 2️⃣ Start UBL Server
 
 ```bash
-cd ubl/kernel/rust/ubl-server
+cd ubl/kernel/rust
 
-# Copy env
-cp .env.example .env
-
-# Run migrations (first time)
-sqlx database setup
+# Apply migrations (first time)
+psql -d ubl_ledger -f ../../../ubl/sql/00_base/000_core.sql
+psql -d ubl_ledger -f ../../../ubl/sql/00_base/001_identity.sql
+psql -d ubl_ledger -f ../../../ubl/sql/00_base/002_policy.sql
+psql -d ubl_ledger -f ../../../ubl/sql/00_base/003_triggers.sql
+psql -d ubl_ledger -f ../../../ubl/sql/10_projections/100_console.sql
+psql -d ubl_ledger -f ../../../ubl/sql/10_projections/101_messenger.sql
+psql -d ubl_ledger -f ../../../ubl/sql/10_projections/102_office.sql
 
 # Start server
-cargo run --release
+DATABASE_URL="postgres://user@localhost/ubl_ledger" cargo run --bin ubl-server
 
 # Verify
 curl http://localhost:8080/health
-# → {"status":"ok","version":"2.0.0"}
+# → {"status":"ok"}
 ```
 
 ---
@@ -55,43 +58,22 @@ curl http://localhost:8080/health
 ## 3️⃣ Start Office
 
 ```bash
-cd office/office
-
-# Copy env
-cp .env.example .env
+cd apps/office
 
 # Start server
-cargo run --release
+cargo run
 
 # Verify
-curl http://localhost:8787/health
+curl http://localhost:8081/health
 # → {"status":"ok"}
 ```
 
 ---
 
-## 4️⃣ Start Messenger Backend
+## 4️⃣ Start Messenger Frontend
 
 ```bash
-cd ubl-messenger/backend
-
-# Copy env
-cp .env.example .env
-
-# Start server
-cargo run --release
-
-# Verify
-curl http://localhost:4000/health
-# → {"status":"ok"}
-```
-
----
-
-## 5️⃣ Start Messenger Frontend
-
-```bash
-cd ubl-messenger/frontend
+cd apps/messenger/frontend
 
 # Install deps (first time)
 npm install
@@ -100,7 +82,20 @@ npm install
 npm run dev
 
 # Open browser
-open http://localhost:5173
+open http://localhost:3000
+```
+
+---
+
+## 5️⃣ Verify All Services
+
+```bash
+# Health checks
+curl -s localhost:8080/health | jq .  # UBL Kernel
+curl -s localhost:8081/health | jq .  # Office
+curl -s localhost:3000                 # Messenger Frontend
+
+# All should return {"status":"ok"} or HTML
 ```
 
 ---
@@ -108,12 +103,12 @@ open http://localhost:5173
 ## 🧪 Quick Smoke Test
 
 ```bash
-# Health checks
-curl -s localhost:8080/health | jq .  # UBL
-curl -s localhost:8787/health | jq .  # Office
-curl -s localhost:4000/health | jq .  # Messenger
+# WebAuthn register test
+curl -s -X POST http://localhost:8080/id/register/begin \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test"}' | jq .
 
-# All should return {"status":"ok"} or similar
+# Should return WebAuthn options
 ```
 
 ---
@@ -133,10 +128,9 @@ docker compose -f docker-compose.stack.yml up
 
 | Service | File |
 |---------|------|
-| UBL Server | `ubl/kernel/rust/ubl-server/.env` |
-| Office | `office/office/.env` |
-| Messenger Backend | `ubl-messenger/backend/.env` |
-| Messenger Frontend | `ubl-messenger/frontend/.env` |
+| UBL Server | Environment variables (DATABASE_URL, WEBAUTHN_ORIGIN) |
+| Office | `apps/office/config/development.toml` |
+| Messenger Frontend | `apps/messenger/frontend/.env` (optional) |
 
 ---
 
@@ -174,10 +168,11 @@ xcode-select --install
 | Service | Port |
 |---------|------|
 | Postgres | 5432 |
-| UBL Server | 8080 |
-| Office | 8787 |
-| Messenger Backend | 4000 |
-| Messenger Frontend | 5173 |
+| UBL Kernel | 8080 |
+| Office | 8081 |
+| Messenger Frontend | 3000 |
+
+
 
 
 

@@ -56,7 +56,7 @@
 **Priority**: 🔴 CRITICAL - Enables job execution
 
 **Tasks**:
-- [ ] Create `office/office/src/job_executor/` module
+- [ ] Create `apps/office/src/job_executor/` module
   ```
   job_executor/
   ├── mod.rs
@@ -69,10 +69,10 @@
 - [ ] Integrate with Office session system
 
 **Files to Create**:
-- `office/office/src/job_executor/mod.rs`
-- `office/office/src/job_executor/executor.rs`
-- `office/office/src/job_executor/progress.rs`
-- `office/office/src/job_executor/context.rs`
+- `apps/office/src/job_executor/mod.rs`
+- `apps/office/src/job_executor/executor.rs`
+- `apps/office/src/job_executor/progress.rs`
+- `apps/office/src/job_executor/context.rs`
 
 **API Endpoints to Add**:
 - `POST /jobs/execute`
@@ -86,7 +86,7 @@
 **Priority**: 🔴 CRITICAL - Enables approval workflow
 
 **Tasks**:
-- [ ] Create `office/office/src/approval_manager/` module
+- [ ] Create `apps/office/src/approval_manager/` module
   ```
   approval_manager/
   ├── mod.rs
@@ -97,9 +97,9 @@
 - [ ] Integrate with MessengerClient
 
 **Files to Create**:
-- `office/office/src/approval_manager/mod.rs`
-- `office/office/src/approval_manager/manager.rs`
-- `office/office/src/approval_manager/decision.rs`
+- `apps/office/src/approval_manager/mod.rs`
+- `apps/office/src/approval_manager/manager.rs`
+- `apps/office/src/approval_manager/decision.rs`
 
 **API Endpoints to Add**:
 - `POST /approvals`
@@ -112,7 +112,7 @@
 **Priority**: 🔴 CRITICAL - Enables Office ↔ Messenger communication
 
 **Tasks**:
-- [ ] Create `office/office/src/messenger_client/` module
+- [ ] Create `apps/office/src/messenger_client/` module
   ```
   messenger_client/
   ├── mod.rs
@@ -125,9 +125,9 @@
 - [ ] Implement progress update sending
 
 **Files to Create**:
-- `office/office/src/messenger_client/mod.rs`
-- `office/office/src/messenger_client/client.rs`
-- `office/office/src/messenger_client/cards.rs`
+- `apps/office/src/messenger_client/mod.rs`
+- `apps/office/src/messenger_client/client.rs`
+- `apps/office/src/messenger_client/cards.rs`
 
 ---
 
@@ -135,7 +135,7 @@
 **Priority**: 🔴 CRITICAL - Enables job management
 
 **Tasks**:
-- [ ] Create `ubl-messenger/backend/src/job/` module
+- [ ] Create `apps/messenger/backend/src/job/` module
   ```
   job/
   ├── mod.rs
@@ -149,11 +149,11 @@
 - [ ] Publish events to UBL
 
 **Files to Create**:
-- `ubl-messenger/backend/src/job/mod.rs`
-- `ubl-messenger/backend/src/job/job.rs`
-- `ubl-messenger/backend/src/job/lifecycle.rs`
-- `ubl-messenger/backend/src/job/repository.rs`
-- `ubl-messenger/backend/src/job/routes.rs`
+- `apps/messenger/backend/src/job/mod.rs`
+- `apps/messenger/backend/src/job/job.rs`
+- `apps/messenger/backend/src/job/lifecycle.rs`
+- `apps/messenger/backend/src/job/repository.rs`
+- `apps/messenger/backend/src/job/routes.rs`
 
 **API Endpoints to Add**:
 - `POST /api/jobs`
@@ -175,7 +175,7 @@
 **Priority**: 🟡 HIGH - Enables card rendering
 
 **Tasks**:
-- [ ] Create `ubl-messenger/backend/src/card/` module
+- [ ] Create `apps/messenger/backend/src/card/` module
   ```
   card/
   ├── mod.rs
@@ -188,10 +188,10 @@
 - [ ] Implement action handling
 
 **Files to Create**:
-- `ubl-messenger/backend/src/card/mod.rs`
-- `ubl-messenger/backend/src/card/card_types.rs`
-- `ubl-messenger/backend/src/card/renderer.rs`
-- `ubl-messenger/backend/src/card/actions.rs`
+- `apps/messenger/backend/src/card/mod.rs`
+- `apps/messenger/backend/src/card/card_types.rs`
+- `apps/messenger/backend/src/card/renderer.rs`
+- `apps/messenger/backend/src/card/actions.rs`
 
 **API Endpoints to Add**:
 - `GET /api/conversations/:id/cards`
@@ -203,7 +203,7 @@
 **Priority**: 🟡 HIGH - Enables UI interaction
 
 **Tasks**:
-- [ ] Create `ubl-messenger/frontend/src/components/cards/` directory
+- [ ] Create `apps/messenger/frontend/src/components/cards/` directory
   ```
   cards/
   ├── JobInitCard.tsx
@@ -217,11 +217,11 @@
 - [ ] Integrate with message list
 
 **Files to Create**:
-- `ubl-messenger/frontend/src/components/cards/JobInitCard.tsx`
-- `ubl-messenger/frontend/src/components/cards/JobProgressCard.tsx`
-- `ubl-messenger/frontend/src/components/cards/JobCompleteCard.tsx`
-- `ubl-messenger/frontend/src/components/cards/ApprovalCard.tsx`
-- `ubl-messenger/frontend/src/components/cards/CardRenderer.tsx`
+- `apps/messenger/frontend/src/components/cards/JobInitCard.tsx`
+- `apps/messenger/frontend/src/components/cards/JobProgressCard.tsx`
+- `apps/messenger/frontend/src/components/cards/JobCompleteCard.tsx`
+- `apps/messenger/frontend/src/components/cards/ApprovalCard.tsx`
+- `apps/messenger/frontend/src/components/cards/CardRenderer.tsx`
 
 ---
 
@@ -229,7 +229,7 @@
 **Priority**: 🟡 HIGH - Enables real-time updates
 
 **Tasks**:
-- [ ] Create `ubl-messenger/backend/src/websocket/` module
+- [ ] Create `apps/messenger/backend/src/websocket/` module
   ```
   websocket/
   ├── mod.rs
@@ -242,13 +242,13 @@
 - [ ] Implement event broadcasting
 
 **Files to Create**:
-- `ubl-messenger/backend/src/websocket/mod.rs`
-- `ubl-messenger/backend/src/websocket/server.rs`
-- `ubl-messenger/backend/src/websocket/rooms.rs`
-- `ubl-messenger/backend/src/websocket/broadcast.rs`
+- `apps/messenger/backend/src/websocket/mod.rs`
+- `apps/messenger/backend/src/websocket/server.rs`
+- `apps/messenger/backend/src/websocket/rooms.rs`
+- `apps/messenger/backend/src/websocket/broadcast.rs`
 
 **Frontend Hook**:
-- [ ] Create `ubl-messenger/frontend/src/hooks/useWebSocket.ts`
+- [ ] Create `apps/messenger/frontend/src/hooks/useWebSocket.ts`
 
 **WebSocket Endpoint**:
 - `WS /ws/conversations/:id`
@@ -265,8 +265,8 @@
 - [ ] Test approval flow
 
 **Files to Update**:
-- `ubl-messenger/backend/src/office_client/mod.rs` (complete implementation)
-- `office/office/src/messenger_client/mod.rs` (complete implementation)
+- `apps/messenger/backend/src/office_client/mod.rs` (complete implementation)
+- `apps/office/src/messenger_client/mod.rs` (complete implementation)
 
 ---
 
@@ -279,7 +279,7 @@
 - [ ] Implement event queries
 
 **Files to Update**:
-- `ubl-messenger/backend/src/ubl_client/mod.rs` (complete implementation)
+- `apps/messenger/backend/src/ubl_client/mod.rs` (complete implementation)
 
 ---
 
@@ -387,12 +387,12 @@ mkdir -p C.Jobs/{boundary,inbox,outbox,local,pacts,policy,projections}
 # Then implement job events in kernel
 
 # 2. Office JobExecutor
-cd ../../office/office/src
+cd ../../apps/office/src
 mkdir -p job_executor approval_manager messenger_client
 # Implement modules
 
 # 3. Messenger Backend Job Module
-cd ../../../ubl-messenger/backend/src
+cd ../../../apps/messenger/backend/src
 mkdir -p job card websocket participant
 # Implement modules
 
