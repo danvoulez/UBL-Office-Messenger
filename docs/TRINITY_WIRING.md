@@ -214,9 +214,38 @@ POST /api/jobs/:id/approve → approve_job()
 | OFFICE → UBL (Job completion) | ✅ Complete |
 | Messenger → OFFICE (Job execution) | ✅ Complete |
 | Real-time WebSocket | ✅ Complete |
-| Frontend Cards | ✅ Structure, needs wiring |
+| Frontend Cards | ✅ Complete |
+| Task Creation Modal | ✅ Complete |
+| Acceptance Card | ✅ Complete |
+| Live Progress Card | ✅ Complete |
 
 **The Trinity is wired.** 🔺
+
+---
+
+## Card Components (2025-12-30)
+
+### TaskCreationModal
+- **Location:** `src/components/modals/TaskCreationModal.tsx`
+- **Trigger:** "+" button in ChatView input bar
+- **Fields:** Title, Description, Priority, Deadline, Cost, Attachments
+- **Flow:** Creates draft → Other party must approve
+
+### LiveProgressCard  
+- **Location:** `src/components/cards/LiveProgressCard.tsx`
+- **Purpose:** Shows running task with progress bar and live logs
+- **Features:** SSE connection, pause/resume logs, cancel task
+
+### AcceptanceCard
+- **Location:** `src/components/cards/AcceptanceCard.tsx`
+- **Purpose:** Completed task awaiting human acceptance
+- **Actions:** Accept (officialize in Ledger) or Dispute
+- **Shows:** Artifacts, git commit info, duration
+
+### JobCardRenderer
+- **Location:** `src/components/cards/JobCardRenderer.tsx`
+- **Purpose:** Generic job card for pending/running/completed states
+- **Actions:** Approve/Reject for pending jobs
 
 
 
