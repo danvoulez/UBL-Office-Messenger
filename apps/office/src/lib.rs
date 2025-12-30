@@ -64,6 +64,7 @@ pub mod ubl_client;
 pub mod llm;
 pub mod api;
 pub mod job_executor;
+pub mod task;
 pub mod audit;
 pub mod middleware;
 pub mod observability;
@@ -109,6 +110,7 @@ pub use governance::{SanityCheck, Constitution, DreamingCycle, Simulation};
 pub use ubl_client::UblClient;
 pub use llm::LlmProvider;
 pub use job_executor::{JobExecutor, Job, JobId, JobResult, ConversationContext};
+pub use task::{Task, TaskId, TaskStatus, TaskExecutor, TaskResult};
 pub use middleware::{PermitMiddleware, PermitRequest, PermitResponse, ConstitutionEnforcer};
 
 use thiserror::Error;
