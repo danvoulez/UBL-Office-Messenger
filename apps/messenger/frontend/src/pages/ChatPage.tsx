@@ -299,7 +299,7 @@ export const ChatPage: React.FC = () => {
     return (
       <div className="h-screen w-screen bg-bg-base flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-accent/20 border-t-accent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-2 border-accent/20 border-t-accent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-text-tertiary text-xxs font-bold uppercase tracking-widest">
             Loading...
           </p>

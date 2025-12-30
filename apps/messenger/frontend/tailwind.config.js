@@ -61,9 +61,9 @@ export default {
         
         // Border
         border: {
-          subtle: 'rgba(255, 255, 255, 0.06)',
-          DEFAULT: 'rgba(255, 255, 255, 0.1)',
-          strong: 'rgba(255, 255, 255, 0.15)',
+          subtle: 'rgba(255, 255, 255, 0.04)',
+          DEFAULT: 'rgba(255, 255, 255, 0.08)',
+          strong: 'rgba(255, 255, 255, 0.12)',
         },
       },
       

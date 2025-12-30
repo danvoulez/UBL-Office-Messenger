@@ -64,7 +64,7 @@ export const EntityProfileModal: React.FC<EntityProfileModalProps> = ({
 
             {/* Header with Avatar */}
             <div className="relative pt-8 pb-6 px-6 text-center bg-gradient-to-b from-accent/10 to-transparent">
-              <div className={`w-20 h-20 mx-auto rounded-2xl flex items-center justify-center overflow-hidden border-4 ${
+              <div className={`w-20 h-20 mx-auto rounded-2xl flex items-center justify-center overflow-hidden border border-white/30 ${
                 isAgent ? 'border-accent bg-accent/10' : 'border-border-default bg-bg-surface'
               }`}>
                 {entity.avatar ? (
@@ -77,7 +77,7 @@ export const EntityProfileModal: React.FC<EntityProfileModalProps> = ({
               </div>
               
               {/* Status Indicator */}
-              <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 translate-y-2 w-4 h-4 rounded-full border-2 border-bg-elevated ${getStatusColor(entity.status)}`} />
+              <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 translate-y-2 w-4 h-4 rounded-full border border-bg-elevated ${getStatusColor(entity.status)}`} />
             </div>
 
             {/* Info */}

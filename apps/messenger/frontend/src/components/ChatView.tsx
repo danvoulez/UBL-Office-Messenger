@@ -128,7 +128,7 @@ const ChatView: React.FC<ChatViewProps> = ({
               }
             }}
           >
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden border-2 transition-colors ${
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden border border-white/20 transition-colors ${
               isAgent ? 'border-accent bg-gradient-to-br from-accent/20 to-cream/10' : 'border-border-default bg-bg-surface'
             }`}>
               {conversation.isGroup ? (

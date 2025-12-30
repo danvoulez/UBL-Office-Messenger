@@ -61,13 +61,13 @@ const Sidebar: React.FC<SidebarProps> = ({
             <img 
               src={currentUser.avatar} 
               alt="Profile" 
-              className="w-full h-full rounded-xl object-cover border-2 border-border-default group-hover:border-accent transition-colors"
+              className="w-full h-full rounded-xl object-cover border border-white/20 group-hover:border-accent/50 transition-colors"
             />
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onToggleStatus(); }}
               title={`Status: ${currentUser.status || 'online'} (click to toggle)`}
-              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 border-2 border-bg-elevated rounded-full shadow-sm transition-colors ${getStatusColor(currentUser.status)}`}
+              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 border border-bg-elevated rounded-full shadow-sm transition-colors ${getStatusColor(currentUser.status)}`}
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -189,7 +189,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 
                 {/* Presence Indicator */}
                 {!conv.isGroup && otherEntity && (
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 border-2 border-bg-elevated rounded-full shadow-sm ${getStatusColor(presenceStatus)}`} 
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 border border-bg-elevated rounded-full shadow-sm ${getStatusColor(presenceStatus)}`} 
                        title={`${otherEntity.name}: ${presenceStatus}`} />
                 )}
                 

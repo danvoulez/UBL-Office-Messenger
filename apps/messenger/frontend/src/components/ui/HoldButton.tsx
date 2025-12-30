@@ -125,7 +125,7 @@ export const HoldButton: React.FC<HoldButtonProps> = ({
       className={`
         relative overflow-hidden
         px-6 py-3 rounded-lg font-bold text-sm
-        border-2 transition-colors
+        border border-white/20 transition-colors
         select-none cursor-pointer
         ${getColors()}
         ${className}

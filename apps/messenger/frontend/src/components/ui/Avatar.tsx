@@ -40,7 +40,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         <IconComponent className="w-1/2 h-1/2" />
       )}
       {online && (
-        <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-bg-base" />
+        <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border border-bg-base" />
       )}
     </div>
   );

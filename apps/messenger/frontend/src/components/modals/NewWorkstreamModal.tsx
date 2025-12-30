@@ -159,8 +159,8 @@ export const NewWorkstreamModal: React.FC<NewWorkstreamModalProps> = ({
                       onClick={() => handleSelectEntity(entity.id)}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                         isSelected
-                          ? 'bg-accent/10 border-2 border-accent'
-                          : 'bg-bg-surface border-2 border-transparent hover:bg-bg-hover'
+                          ? 'bg-accent/10 border border-accent/60'
+                          : 'bg-bg-surface border border-transparent hover:bg-bg-hover'
                       }`}
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden ${

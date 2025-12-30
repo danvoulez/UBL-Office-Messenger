@@ -262,7 +262,7 @@ export const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
 
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-3 px-4 bg-bg-surface border-2 border-dashed border-border-default hover:border-accent rounded-xl text-text-secondary hover:text-accent transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 px-4 bg-bg-surface border border-dashed border-border-default/50 hover:border-accent/50 rounded-xl text-text-secondary hover:text-accent transition-all flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="text-sm font-medium">Adicionar Arquivo</span>
