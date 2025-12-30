@@ -1,10 +1,17 @@
 use sqlx::PgPool;
 use sqlx::Row;
 use uuid::Uuid;
-use crate::auth::session::{Session, SessionFlavor};
+use crate::auth::session::{Session, SessionFlavor, SessionContext};
 
 pub async fn insert(pool: &PgPool, s: &Session) -> sqlx::Result<()> {
     let sid_str = s.sid.to_string();
+    
+    // Serialize context into scope for storage
+    let scope_with_context = serde_json::json!({
+        "legacy": s.scope,
+        "context": s.context,
+    });
+    
     sqlx::query(
         r#"INSERT INTO id_session (token, sid, tenant_id, flavor, scope, exp_unix)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -15,7 +22,7 @@ pub async fn insert(pool: &PgPool, s: &Session) -> sqlx::Result<()> {
     .bind(&sid_str)
     .bind(&s.tenant_id)
     .bind(flavor_str(s.flavor))
-    .bind(&s.scope)
+    .bind(&scope_with_context)
     .bind(s.exp_unix)
     .execute(pool)
     .await?;
@@ -42,6 +49,20 @@ pub async fn get_valid(pool: &PgPool, token: &str) -> sqlx::Result<Option<Sessio
         let exp_unix: Option<i64> = r.get("exp_unix");
         
         let sid = Uuid::parse_str(&sid_str).ok()?;
+        
+        // Extract context from scope (with fallback for legacy sessions)
+        let context: SessionContext = scope.get("context")
+            .and_then(|c| serde_json::from_value(c.clone()).ok())
+            .unwrap_or_else(|| SessionContext {
+                tenant_id: tenant_id.clone(),
+                ..Default::default()
+            });
+        
+        // Extract legacy scope if present
+        let legacy_scope = scope.get("legacy")
+            .cloned()
+            .unwrap_or_else(|| scope.clone());
+        
         Some(Session {
             token,
             sid,
@@ -50,10 +71,25 @@ pub async fn get_valid(pool: &PgPool, token: &str) -> sqlx::Result<Option<Sessio
                 "stepup" => SessionFlavor::StepUp,
                 _ => SessionFlavor::Regular,
             },
-            scope,
+            scope: legacy_scope,
+            context,
             exp_unix: exp_unix?,
         })
     }))
+}
+
+/// Update session context without invalidating session
+pub async fn update_context(pool: &PgPool, token: &str, context: &SessionContext) -> sqlx::Result<()> {
+    // First get the current session to preserve other fields
+    let session = get_valid(pool, token).await?;
+    
+    if let Some(mut s) = session {
+        s.context = context.clone();
+        s.tenant_id = context.tenant_id.clone();
+        insert(pool, &s).await?;
+    }
+    
+    Ok(())
 }
 
 pub async fn delete(pool: &PgPool, token: &str) -> sqlx::Result<()> {
