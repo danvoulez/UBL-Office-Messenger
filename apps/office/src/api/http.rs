@@ -18,7 +18,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::entity::{Entity, EntityId, EntityParams, EntityType, Instance, EntityRepository};
-use crate::session::{Session, SessionType, SessionMode, SessionConfig};
+use crate::session::{Session, SessionType, SessionMode, SessionConfig, Handover};
 use crate::context::{ContextFrameBuilder, Narrator};
 use crate::governance::{Constitution, DreamingCycle, DreamingConfig, Simulation, SimulationConfig, Action};
 use crate::ubl_client::UblClient;
@@ -38,6 +38,7 @@ pub struct AppState {
     pub entities: HashMap<EntityId, Entity>,
     pub sessions: HashMap<String, Session>,
     pub instances: HashMap<String, Instance>,
+    pub handovers: HashMap<EntityId, Vec<Handover>>,
 }
 
 impl AppState {
@@ -81,6 +82,7 @@ impl AppState {
             entities: HashMap::new(),
             sessions: HashMap::new(),
             instances: HashMap::new(),
+            handovers: HashMap::new(),
         }
     }
 }
@@ -127,6 +129,9 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/entities/:id/sessions/:sid", get(get_session))
         .route("/entities/:id/sessions/:sid", delete(end_session))
         .route("/entities/:id/sessions/:sid/message", post(send_message))
+        .route("/entities/:id/sessions/:sid/handover", post(create_handover))
+        .route("/entities/:id/handovers", get(list_handovers))
+        .route("/entities/:id/handovers/latest", get(get_latest_handover))
 
         // Dreaming
         .route("/entities/:id/dream", post(trigger_dream))
@@ -277,14 +282,28 @@ async fn create_session(
         session = session.with_budget(budget);
     }
 
+    // Get the latest handover from local memory
+    let latest_handover = state.handovers.get(&entity_id)
+        .and_then(|h| h.last())
+        .map(|ho| ho.content.clone());
+
     // Build context frame
-    let frame = ContextFrameBuilder::new(
+    let mut frame = ContextFrameBuilder::new(
         entity.clone(),
         req.session_type,
         state.ubl_client.clone(),
     )
     .build()
     .await?;
+
+    // Inject local handover if UBL didn't provide one
+    if frame.previous_handover.is_none() {
+        if let Some(handover_content) = latest_handover {
+            frame.previous_handover = Some(handover_content);
+            // Recalculate hash since we modified the frame
+            frame.frame_hash = frame.calculate_hash();
+        }
+    }
 
     // Generate narrative
     let narrator = Narrator::default();
@@ -362,6 +381,118 @@ async fn end_session(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ============ Handovers ============
+
+#[derive(Debug, Deserialize)]
+struct CreateHandoverRequest {
+    content: String,
+    summary: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct HandoverResponse {
+    id: String,
+    entity_id: String,
+    session_id: String,
+    content: String,
+    summary: Option<String>,
+    created_at: String,
+}
+
+async fn create_handover(
+    State(state): State<SharedState>,
+    Path((entity_id, session_id)): Path<(String, String)>,
+    Json(req): Json<CreateHandoverRequest>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    let mut state = state.write().await;
+
+    // Verify session exists and belongs to entity
+    let instance_id = {
+        let session = state.sessions.get(&session_id)
+            .ok_or_else(|| ApiError::NotFound(format!("Session not found: {}", session_id)))?;
+
+        if session.entity_id != entity_id {
+            return Err(ApiError::NotFound("Session not found for entity".to_string()));
+        }
+
+        session.current_instance_id.clone().unwrap_or_default()
+    };
+
+    // Create handover
+    let mut handover = Handover::new(
+        entity_id.clone(),
+        session_id.clone(),
+        instance_id,
+        req.content.clone(),
+    );
+
+    if let Some(summary) = req.summary {
+        handover.summary = Some(summary);
+    }
+
+    let handover_id = handover.id.clone();
+    let created_at = handover.created_at.to_rfc3339();
+
+    // Store handover
+    state.handovers.entry(entity_id.clone())
+        .or_insert_with(Vec::new)
+        .push(handover);
+
+    info!("Created handover: {} for session: {}", handover_id, session_id);
+
+    Ok((StatusCode::CREATED, Json(HandoverResponse {
+        id: handover_id,
+        entity_id,
+        session_id,
+        content: req.content,
+        summary: None,
+        created_at,
+    })))
+}
+
+async fn list_handovers(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<String>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    let state = state.read().await;
+
+    let handovers = state.handovers.get(&entity_id)
+        .map(|h| h.iter().map(|ho| HandoverResponse {
+            id: ho.id.clone(),
+            entity_id: ho.entity_id.clone(),
+            session_id: ho.session_id.clone(),
+            content: ho.content.clone(),
+            summary: ho.summary.clone(),
+            created_at: ho.created_at.to_rfc3339(),
+        }).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    Ok(Json(handovers))
+}
+
+async fn get_latest_handover(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<String>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    let state = state.read().await;
+
+    let handover = state.handovers.get(&entity_id)
+        .and_then(|h| h.last())
+        .map(|ho| HandoverResponse {
+            id: ho.id.clone(),
+            entity_id: ho.entity_id.clone(),
+            session_id: ho.session_id.clone(),
+            content: ho.content.clone(),
+            summary: ho.summary.clone(),
+            created_at: ho.created_at.to_rfc3339(),
+        });
+
+    match handover {
+        Some(h) => Ok(Json(h)),
+        None => Err(ApiError::NotFound("No handovers found".to_string())),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct SendMessageRequest {
     content: String,
@@ -411,11 +542,11 @@ async fn send_message(
         (narrative, remaining, instance_id, llm_provider)
     };
 
-    // Create LLM request
+    // Create LLM request with narrative as system instruction
     let llm_request = LlmRequest::new(vec![
-        LlmMessage::system(narrative),
         LlmMessage::user(req.content),
     ])
+    .with_system(narrative)  // Use dedicated system field for Gemini compatibility
     .with_max_tokens(remaining_budget as u32);
 
     // Call LLM

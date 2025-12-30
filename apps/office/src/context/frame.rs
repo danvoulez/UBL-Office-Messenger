@@ -142,7 +142,7 @@ impl ContextFrame {
     }
 
     /// Calculate hash of this frame using BLAKE3 (consistent with UBL kernel)
-    fn calculate_hash(&self) -> ContextHash {
+    pub fn calculate_hash(&self) -> ContextHash {
         let mut hasher = blake3::Hasher::new();
 
         // Hash key components

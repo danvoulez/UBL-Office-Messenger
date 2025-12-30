@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// State of a ledger (container)
+/// Aligned with UBL Kernel response format
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LedgerState {
     /// Container ID
@@ -12,9 +13,14 @@ pub struct LedgerState {
     pub sequence: u64,
     /// Last entry hash
     pub last_hash: String,
-    /// Physical balance
+    /// Entry count (from UBL)
+    #[serde(default)]
+    pub entry_count: u64,
+    /// Physical balance (optional - computed from projections)
+    #[serde(default)]
     pub physical_balance: i64,
-    /// Merkle root (for verification)
+    /// Merkle root (optional - for verification)
+    #[serde(default)]
     pub merkle_root: String,
 }
 

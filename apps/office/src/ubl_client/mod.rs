@@ -102,8 +102,14 @@ impl UblClient {
             return Ok(LedgerState::default());
         }
 
-        resp.json().await
-            .map_err(|e| OfficeError::UblError(format!("Parse failed: {}", e)))
+        // Try to parse, fallback to default if structure doesn't match
+        match resp.json::<LedgerState>().await {
+            Ok(state) => Ok(state),
+            Err(e) => {
+                tracing::warn!("UBL state parse failed (using default): {}", e);
+                Ok(LedgerState::default())
+            }
+        }
     }
 
     /// Get recent events for an entity from C.Office audit log projection
