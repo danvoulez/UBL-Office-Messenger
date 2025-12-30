@@ -197,7 +197,7 @@ export const AcceptanceCard: React.FC<AcceptanceCardProps> = ({
       ) : null}
 
       {/* Actions */}
-      <div className="flex gap-2 pt-3 border-t border-border-subtle">
+      <div className="flex gap-2 pt-4 mt-1">
         {showDisputeForm ? (
           <>
             <button

@@ -55,7 +55,7 @@ export const Modal: React.FC<ModalProps> = ({
             onClick={e => e.stopPropagation()}
           >
             {title && (
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+              <div className="flex items-center justify-between px-6 py-4 bg-bg-elevated">
                 <h2 className="text-lg font-bold">{title}</h2>
                 <button
                   onClick={onClose}

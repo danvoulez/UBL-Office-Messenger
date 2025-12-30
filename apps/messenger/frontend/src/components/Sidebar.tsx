@@ -50,9 +50,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-[340px] h-full bg-bg-elevated border-r border-border-subtle flex flex-col flex-shrink-0">
+    <aside className="w-[340px] h-full bg-bg-elevated flex flex-col flex-shrink-0">
       {/* User Header */}
-      <div className="p-5 border-b border-border-subtle">
+      <div className="p-5 bg-bg-elevated">
         <div 
           onClick={() => onInspectEntity(currentUser, 'profile')}
           className="flex items-center gap-3 p-3 -m-3 rounded-xl hover:bg-bg-hover cursor-pointer transition-all group"
@@ -61,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <img 
               src={currentUser.avatar} 
               alt="Profile" 
-              className="w-full h-full rounded-xl object-cover border border-white/20 group-hover:border-accent/50 transition-colors"
+              className="w-full h-full rounded-xl object-cover border border-transparent group-hover:border-accent transition-colors"
             />
             <button
               type="button"
@@ -162,10 +162,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div 
               key={conv.id}
               onClick={() => onSelectConv(conv.id)}
-              className={`group relative flex items-center gap-3 p-3 mb-1 rounded-xl cursor-pointer transition-all ${
+              className={`group relative flex items-center gap-3 p-3 mb-1 rounded-xl cursor-pointer transition-all border-l-2 ${
                 isActive 
-                  ? 'bg-bg-active' 
-                  : 'hover:bg-bg-hover'
+                  ? 'bg-bg-active border-accent' 
+                  : 'border-transparent hover:bg-bg-hover hover:border-accent/50'
               }`}
             >
               {/* Active Indicator */}
@@ -243,7 +243,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border-subtle flex items-center justify-between">
+      <div className="p-4 bg-bg-surface flex items-center justify-between">
         <span className="text-[10px] font-bold text-text-tertiary font-mono uppercase tracking-wider">UBL v2.0.0</span>
         <div className="flex items-center gap-2 text-[10px] text-text-tertiary">
           <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse-soft" />

@@ -169,7 +169,7 @@ const JobCardRenderer: React.FC<JobCardRendererProps> = ({ card, onAction, onSta
 
       {/* Actions */}
       {displayStatus === 'pending' && (
-        <div className="flex gap-2 mt-3 pt-3 border-t border-border-subtle">
+        <div className="flex gap-2 mt-4 pt-1">
           <button 
             onClick={handleApprove}
             disabled={isLoading}

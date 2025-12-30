@@ -94,7 +94,7 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-bg-base">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-bg-elevated/80 backdrop-blur-xl border-b border-border-subtle">
+      <div className="sticky top-0 z-10 bg-bg-elevated/80 backdrop-blur-xl">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
@@ -140,7 +140,7 @@ export const SettingsPage: React.FC = () => {
           transition={{ delay: 0.1 }}
           className="card"
         >
-          <div className="p-4 border-b border-border-subtle">
+          <div className="p-4 bg-bg-surface/50 rounded-t-xl">
             <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
               Appearance
             </h3>
@@ -183,7 +183,7 @@ export const SettingsPage: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="card"
         >
-          <div className="p-4 border-b border-border-subtle">
+          <div className="p-4 bg-bg-surface/50 rounded-t-xl">
             <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
               Notifications
             </h3>
@@ -221,7 +221,7 @@ export const SettingsPage: React.FC = () => {
           transition={{ delay: 0.3 }}
           className="card"
         >
-          <div className="p-4 border-b border-border-subtle">
+          <div className="p-4 bg-bg-surface/50 rounded-t-xl">
             <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
               Security
             </h3>

@@ -73,7 +73,7 @@ const JobCard: React.FC<JobCardProps> = ({ data: initialData }) => {
             </div>
           ))}
           {data.metadata.amount && (
-            <div className="border-t border-border-subtle pt-2 mt-2 flex justify-between font-bold text-accent text-sm">
+            <div className="pt-3 mt-3 flex justify-between font-bold text-accent text-sm">
               <span>LEDGER TOTAL</span>
               <span>{data.metadata.amount}</span>
             </div>

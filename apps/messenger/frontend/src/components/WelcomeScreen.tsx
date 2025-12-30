@@ -68,7 +68,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   <button
                     key={conv.id}
                     onClick={() => onSelectConversation(conv.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-bg-elevated border border-border-subtle hover:border-accent/30 hover:bg-bg-hover transition-all group"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-bg-elevated border border-transparent hover:border-accent hover:bg-bg-hover transition-all group"
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${
                       conv.isGroup ? 'bg-info/10 text-info' :
@@ -121,7 +121,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         </div>
 
         {/* Stats */}
-        <div className="mt-10 pt-6 border-t border-border-subtle grid grid-cols-3 gap-4">
+        <div className="mt-10 pt-6 grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="text-2xl font-black text-accent">{conversations.length}</div>
             <div className="text-[9px] font-bold text-text-tertiary uppercase tracking-wider">Workstreams</div>

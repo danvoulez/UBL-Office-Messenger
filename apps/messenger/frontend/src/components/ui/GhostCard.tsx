@@ -57,7 +57,7 @@ export const GhostCard: React.FC<GhostCardProps> = ({
             <SkeletonBox className="w-24 h-3 rounded" />
             <SkeletonBox className="w-16 h-3 rounded" />
           </div>
-          <div className="border-t border-border-subtle pt-2 mt-2 flex justify-between">
+          <div className="pt-3 mt-3 flex justify-between">
             <SkeletonBox className="w-20 h-4 rounded" />
             <SkeletonBox className="w-28 h-4 rounded" />
           </div>

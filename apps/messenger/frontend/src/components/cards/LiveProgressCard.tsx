@@ -234,7 +234,7 @@ export const LiveProgressCard: React.FC<LiveProgressCardProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 pt-3 border-t border-border-subtle">
+      <div className="flex gap-2 pt-4 mt-1">
         {onViewDetails && (
           <button
             onClick={() => onViewDetails(card.id)}

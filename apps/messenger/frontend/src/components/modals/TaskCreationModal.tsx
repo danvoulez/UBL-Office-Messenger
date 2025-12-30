@@ -109,7 +109,7 @@ export const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
             className="fixed inset-x-4 top-[5%] bottom-[5%] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg bg-bg-elevated border border-border-default rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 bg-bg-elevated shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
                   <FileText className="w-5 h-5" />
@@ -272,7 +272,7 @@ export const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-4 border-t border-border-subtle shrink-0 bg-bg-surface/50">
+            <div className="px-5 py-4 shrink-0 bg-bg-surface">
               <div className="flex gap-3">
                 <button
                   onClick={handleClose}

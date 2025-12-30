@@ -105,7 +105,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg-base">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-bg-elevated border-b border-border-subtle min-h-[64px]">
+      <header className="flex items-center justify-between px-6 py-4 bg-bg-elevated min-h-[64px]">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {/* Back Button (Mobile) */}
           {onBack && (
@@ -128,8 +128,8 @@ const ChatView: React.FC<ChatViewProps> = ({
               }
             }}
           >
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden border border-white/20 transition-colors ${
-              isAgent ? 'border-accent bg-gradient-to-br from-accent/20 to-cream/10' : 'border-border-default bg-bg-surface'
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden border border-transparent hover:border-accent transition-colors ${
+              isAgent ? 'bg-gradient-to-br from-accent/20 to-cream/10' : 'bg-bg-surface'
             }`}>
               {conversation.isGroup ? (
                 <span className="text-info"><Icons.Group /></span>
@@ -272,7 +272,7 @@ const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input */}
-      <footer className="px-6 py-4 bg-bg-elevated border-t border-border-subtle">
+      <footer className="px-6 py-4 bg-bg-elevated">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end gap-3 bg-bg-surface border border-border-default rounded-2xl p-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 transition-all">
             {/* Task Button (+ to start a task) */}

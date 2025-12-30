@@ -92,7 +92,7 @@ export const NewWorkstreamModal: React.FC<NewWorkstreamModalProps> = ({
             className="fixed inset-x-4 top-[10%] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md bg-bg-elevated border border-border-default rounded-2xl shadow-2xl z-50 overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
+            <div className="flex items-center justify-between px-5 py-4 bg-bg-elevated">
               <h2 className="text-lg font-bold text-text-primary">
                 {mode === 'select' ? 'New Workstream' : 'Create Group'}
               </h2>
@@ -159,8 +159,8 @@ export const NewWorkstreamModal: React.FC<NewWorkstreamModalProps> = ({
                       onClick={() => handleSelectEntity(entity.id)}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                         isSelected
-                          ? 'bg-accent/10 border border-accent/60'
-                          : 'bg-bg-surface border border-transparent hover:bg-bg-hover'
+                          ? 'bg-accent/10 border border-accent'
+                          : 'bg-bg-surface border border-transparent hover:bg-bg-hover hover:border-accent/50'
                       }`}
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden ${
@@ -191,7 +191,7 @@ export const NewWorkstreamModal: React.FC<NewWorkstreamModalProps> = ({
 
             {/* Footer (Group mode only) */}
             {mode === 'group' && (
-              <div className="px-5 py-4 border-t border-border-subtle">
+              <div className="px-5 py-4 bg-bg-surface">
                 <button
                   onClick={handleCreateGroup}
                   disabled={selectedParticipants.length < 2 || !groupName.trim()}
