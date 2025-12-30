@@ -18,8 +18,43 @@
     { "src": "/icons/ubl-192.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any maskable" },
     { "src": "/icons/ubl-256.jpg", "sizes": "256x256", "type": "image/jpeg", "purpose": "any maskable" },
     { "src": "/icons/ubl-384.jpg", "sizes": "384x384", "type": "image/jpeg", "purpose": "any maskable" },
-    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any" },
+    { "src": "/icons/maskable_icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "/icons/apple-touch-icon-180x180.jpg", "sizes": "180x180", "type": "image/jpeg", "purpose": "any" }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo Workstream",
+      "short_name": "Workstream",
+      "url": "/#/new",
+      "description": "Criar rapidamente um novo workstream"
+    },
+    {
+      "name": "Abrir Office",
+      "short_name": "Office",
+      "url": "/#/office",
+      "description": "Abrir o Office runtime"
+    }
+  ],
+  "share_target": {
+    "action": "/#/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "image/*",
+            "text/plain",
+            "application/pdf"
+          ]
+        }
+      ]
+    }
+  }
 }
 
