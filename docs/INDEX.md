@@ -25,15 +25,13 @@
 
 | Document | Description |
 |----------|-------------|
-| [C_TENANT_DESIGN_DOCUMENT](C_TENANT_DESIGN_DOCUMENT.md) | Multi-tenant architecture design |
-| [C_TENANT_IMPLEMENTATION](C_TENANT_IMPLEMENTATION.md) | Implementation summary |
+| [C_TENANT](C_TENANT.md) | Design + implementation |
 
 ## 📊 Status & Progress
 
 | Document | Description |
 |----------|-------------|
 | [STATUS](STATUS.md) | Current implementation status |
-| [WIRING_STATUS](WIRING_STATUS.md) | Wiring completion status |
 | [ROADMAP](ROADMAP.md) | Future plans |
 | [RUNBOOK](RUNBOOK.md) | Operations and troubleshooting |
 
@@ -147,14 +145,12 @@ docs/
 ├── ARCHITECTURE.md           ← System design
 ├── THREE_SYSTEMS_OVERVIEW.md ← Deep-dive all systems  
 ├── WIRING_GUIDE.md           ← Integration guide
-├── WIRING_STATUS.md          ← Wiring completion status
 │
 ├── SPEC_UBL_SCHENGEN.md      ← Authorization spec
 ├── SCHENGEN_...CHECKLIST.md  ← Implementation checklist
 ├── WHY_SO_COMPLEX.md         ← System philosophy
 │
-├── C_TENANT_DESIGN_...md     ← Tenant design
-├── C_TENANT_IMPLEMENTATION.md← Tenant implementation
+├── C_TENANT.md               ← Multi-tenancy
 │
 ├── STATUS.md                 ← Current status
 ├── ROADMAP.md                ← Future plans
