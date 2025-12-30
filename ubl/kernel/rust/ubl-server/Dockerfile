@@ -2,7 +2,7 @@
 # Multi-stage build for minimal image
 
 # Stage 1: Build (using Alpine for musl-compatible binary)
-FROM rust:1.75-alpine AS builder
+FROM rust:1.83-alpine AS builder
 
 RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig
 
