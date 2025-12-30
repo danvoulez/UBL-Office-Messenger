@@ -377,6 +377,155 @@ ORDER BY sequence;
 | **No Ledger** | ✅ | ✅ | ✅ |
 | **Auditável** | ✅ | ✅ | ✅ |
 
+---
+
+## SessionContext Genérico (v1.1)
+
+A Zona Schengen não vale só para `tenant_id` — vale para **qualquer contexto** que precisa ser propagado na sessão sem forçar re-autenticação.
+
+### Estrutura
+
+```rust
+/// Zona Schengen Context - contexto propagado sem re-auth
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SessionContext {
+    /// Organização/tenant atual
+    pub tenant_id: Option<String>,
+    
+    /// Papel atual dentro do tenant (owner, admin, member)
+    pub role: Option<String>,
+    
+    /// Modo de operação (admin, viewer, readonly)
+    pub mode: Option<String>,
+    
+    /// Workspace ativo dentro do tenant
+    pub workspace_id: Option<String>,
+    
+    /// Se admin está impersonando outro usuário
+    pub impersonating: Option<String>,
+}
+
+pub struct Session {
+    pub token: String,
+    pub sid: Uuid,
+    pub tenant_id: Option<String>,  // Acesso rápido
+    pub flavor: SessionFlavor,
+    pub scope: serde_json::Value,
+    pub context: SessionContext,    // ← Contexto completo
+    pub exp_unix: i64,
+}
+```
+
+### Casos de Uso
+
+| Campo | Propósito | Quando é Setado | Exemplo |
+|-------|-----------|-----------------|---------|
+| `tenant_id` | Qual organização | Login, switch tenant | `"tenant_abc123"` |
+| `role` | Papel no tenant | Login, assume role | `"admin"`, `"member"` |
+| `mode` | Modo de visualização | Toggle no UI | `"viewer"`, `"readonly"` |
+| `workspace_id` | Workspace ativo | Seleção | `"ws_marketing"` |
+| `impersonating` | Admin vendo como outro user | Admin action | `"user_xyz789"` |
+
+### Builder Pattern
+
+```rust
+// Criar sessão com contexto completo de uma vez
+let context = SessionContext {
+    tenant_id: Some("tenant_abc123".into()),
+    role: Some("admin".into()),
+    mode: Some("full".into()),
+    ..Default::default()
+};
+let session = Session::new_with_context(sid, SessionFlavor::Regular, context);
+
+// Ou usar builder pattern fluente
+let session = Session::new_regular(sid)
+    .with_tenant("tenant_abc123".into())
+    .with_role("admin".into())
+    .with_mode("full".into())
+    .with_workspace("ws_main".into());
+```
+
+### Helpers
+
+```rust
+impl Session {
+    /// Verifica se tem privilégios admin
+    pub fn is_admin(&self) -> bool {
+        self.flavor == SessionFlavor::StepUp || 
+        self.context.role.as_deref() == Some("admin") ||
+        self.context.role.as_deref() == Some("owner")
+    }
+}
+
+// Uso:
+if session.is_admin() {
+    // Pode fazer operações admin
+}
+```
+
+### Atualizar Contexto Sem Nova Sessão
+
+```rust
+// Mudar de tenant sem relogin
+session_db::update_context(&pool, &token, &SessionContext {
+    tenant_id: Some("tenant_xyz".into()),
+    role: Some("member".into()),
+    ..Default::default()
+}).await?;
+```
+
+### Persistência
+
+O contexto é serializado no campo `scope` JSON existente:
+
+```json
+{
+  "legacy": {},
+  "context": {
+    "tenant_id": "tenant_abc123",
+    "role": "admin",
+    "mode": "full",
+    "workspace_id": "ws_main",
+    "impersonating": null
+  }
+}
+```
+
+**Compatibilidade:** Sessões antigas sem `context` recebem defaults, mantendo backward compatibility.
+
+---
+
+## Diagrama: Contexto na Zona Schengen
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                           SESSÃO                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  token: "abc-123-def"        ← identificador único                  │
+│  sid: UUID                   ← quem é                               │
+│  flavor: Regular/StepUp      ← nível de auth                        │
+│  exp_unix: 1735600000        ← expiração                            │
+│                                                                      │
+│  ┌─ SessionContext (Zona Schengen) ─────────────────────────────┐   │
+│  │                                                               │   │
+│  │  tenant_id: "tenant_abc"     ← qual organização              │   │
+│  │  role: "admin"               ← papel atual                   │   │
+│  │  mode: "full"                ← modo de operação              │   │
+│  │  workspace_id: "ws_main"     ← workspace ativo               │   │
+│  │  impersonating: null         ← se está impersonando          │   │
+│  │                                                               │   │
+│  │  ✓ Propagado automaticamente em todas as requests            │   │
+│  │  ✓ Não requer re-autenticação para mudar                     │   │
+│  │  ✓ Auditável (salvo no scope JSON)                           │   │
+│  │                                                               │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ### Conclusão
 
 O UBL já implementa a Zona Schengen corretamente:
@@ -384,8 +533,9 @@ O UBL já implementa a Zona Schengen corretamente:
 - **Interior fluido** (Bearer token, sem re-auth)
 - **Peso criptográfico em tudo** (Ed25519 em cada commit)
 - **Step-up quando necessário** (L4-L5, admin)
+- **Contexto genérico** (SessionContext para qualquer propagação)
 
 O que falta é:
-1. Propagar `tenant_id` consistentemente
+1. ~~Propagar `tenant_id` consistentemente~~ ✅ Implementado
 2. Implementar assinatura client-side em produção
 3. UI de step-up no frontend
