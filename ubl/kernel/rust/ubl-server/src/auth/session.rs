@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub struct Session {
     pub token: String,
     pub sid: Uuid,
+    pub tenant_id: Option<String>,  // Zona Schengen: tenant context
     pub flavor: SessionFlavor,
     pub scope: serde_json::Value,
     pub exp_unix: i64,
@@ -21,10 +22,15 @@ pub enum SessionFlavor {
 
 impl Session {
     pub fn new_regular(sid: Uuid) -> Self {
+        Self::new_regular_with_tenant(sid, None)
+    }
+
+    pub fn new_regular_with_tenant(sid: Uuid, tenant_id: Option<String>) -> Self {
         let exp = OffsetDateTime::now_utc() + Duration::hours(1);
         Self {
             token: Uuid::new_v4().to_string(),
             sid,
+            tenant_id,
             flavor: SessionFlavor::Regular,
             scope: serde_json::json!({}),
             exp_unix: exp.unix_timestamp(),
@@ -32,10 +38,15 @@ impl Session {
     }
 
     pub fn new_stepup(sid: Uuid) -> Self {
+        Self::new_stepup_with_tenant(sid, None)
+    }
+
+    pub fn new_stepup_with_tenant(sid: Uuid, tenant_id: Option<String>) -> Self {
         let exp = OffsetDateTime::now_utc() + Duration::minutes(10);
         Self {
             token: Uuid::new_v4().to_string(),
             sid,
+            tenant_id,
             flavor: SessionFlavor::StepUp,
             scope: serde_json::json!({"role": "admin"}),
             exp_unix: exp.unix_timestamp(),

@@ -82,6 +82,7 @@ pub struct UserInfo {
     pub sid: String,
     pub display_name: String,
     pub kind: String,
+    pub tenant_id: Option<String>,  // Zona Schengen: tenant from session
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -497,6 +498,7 @@ pub async fn get_user_from_session(pool: &PgPool, headers: &HeaderMap) -> Option
     // Validate session
     let session = crate::auth::session_db::get_valid(pool, &token).await.ok()??;
     let sid_str = session.sid.to_string();
+    let tenant_id = session.tenant_id.clone();  // Extract tenant from session (Zona Schengen)
     
     // Get subject details
     let subject = crate::id_db::get_subject(pool, &sid_str).await.ok()??;
@@ -505,6 +507,7 @@ pub async fn get_user_from_session(pool: &PgPool, headers: &HeaderMap) -> Option
         sid: subject.sid,
         display_name: subject.display_name,
         kind: subject.kind,
+        tenant_id,
     })
 }
 

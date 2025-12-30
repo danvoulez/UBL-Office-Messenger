@@ -19,6 +19,7 @@ use webauthn_rs::prelude::*;
 use crate::id_db;
 use crate::auth::session::{Session, SessionFlavor};
 use crate::auth::session_db;
+use crate::tenant;
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -783,7 +784,13 @@ pub async fn route_login_finish(
     let final_sid_uuid = Uuid::parse_str(&final_sid)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Invalid SID format".to_string()))?;
     
-    let session = Session::new_regular(final_sid_uuid);
+    // 8.1 Get user's default tenant for Zona Schengen
+    let user_tenant = tenant::db::get_user_tenant(&state.pool, &final_sid)
+        .await
+        .ok()
+        .flatten();
+    
+    let session = Session::new_regular_with_tenant(final_sid_uuid, user_tenant);
     session_db::insert(&state.pool, &session)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
@@ -1016,7 +1023,13 @@ pub async fn route_stepup_finish(
     let sid_uuid = Uuid::parse_str(&sid)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Invalid SID format".to_string()))?;
     
-    let session = Session::new_stepup(sid_uuid);
+    // Get user's tenant for step-up session (Zona Schengen)
+    let user_tenant = tenant::db::get_user_tenant(&state.pool, &sid)
+        .await
+        .ok()
+        .flatten();
+    
+    let session = Session::new_stepup_with_tenant(sid_uuid, user_tenant);
     session_db::insert(&state.pool, &session)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create step-up session: {}", e)))?;

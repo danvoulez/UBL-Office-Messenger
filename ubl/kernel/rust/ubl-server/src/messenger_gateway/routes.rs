@@ -11,7 +11,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use time::OffsetDateTime;
 use tracing::{error, info};
@@ -137,7 +137,8 @@ async fn post_message(
         .ok_or((StatusCode::UNAUTHORIZED, "Not authenticated".to_string()))?;
     
     // 2. Check idempotency
-    let tenant_id = "default"; // TODO: Extract from session
+    // Zona Schengen: Use tenant_id from session
+    let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let idempotency_key = req.idempotency_key.clone().unwrap_or_else(|| {
         crate::messenger_gateway::idempotency::IdempotencyStore::generate_key(
             tenant_id,
@@ -266,11 +267,12 @@ async fn job_action(
     Json(req): Json<JobActionRequest>,
 ) -> Result<Json<JobActionResponse>, (StatusCode, String)> {
     // 1. Get user from session
-    let _user = get_user_from_session(&state.pool, &headers).await
+    let user = get_user_from_session(&state.pool, &headers).await
         .ok_or((StatusCode::UNAUTHORIZED, "Not authenticated".to_string()))?;
     
     // 2. Check idempotency
-    let tenant_id = "default"; // TODO: Extract from session
+    // Zona Schengen: Use tenant_id from session
+    let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let idempotency_key = req.idempotency_key.clone().unwrap_or_else(|| {
         crate::messenger_gateway::idempotency::IdempotencyStore::generate_key(
             tenant_id,
@@ -351,20 +353,28 @@ async fn get_job(
 ) -> Result<Json<JobResponse>, (StatusCode, String)> {
     let tenant_id = params.get("tenant_id").cloned().unwrap_or_else(|| "default".to_string());
     
-    // Query job header from projection_jobs
-    let job_row = sqlx::query!(
+    // Query job header from projection_jobs (using dynamic query)
+    let job_row = sqlx::query(
         r#"
         SELECT job_id, title, goal, state, owner_entity_id, available_actions
         FROM projection_jobs
         WHERE tenant_id = $1 AND job_id = $2
-        "#,
-        tenant_id,
-        job_id
+        "#
     )
+    .bind(&tenant_id)
+    .bind(&job_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .ok_or((StatusCode::NOT_FOUND, "Job not found".to_string()))?;
+    
+    // Extract fields from row
+    let job_job_id: String = job_row.get("job_id");
+    let job_title: String = job_row.get("title");
+    let job_goal: String = job_row.get("goal");
+    let job_state: String = job_row.get("state");
+    let owner_entity_id: String = job_row.get("owner_entity_id");
+    let available_actions_json: Option<serde_json::Value> = job_row.try_get("available_actions").ok();
     
     // Query timeline events
     let job_events = crate::projections::JobEventsProjection::new(state.pool.clone());
@@ -376,41 +386,46 @@ async fn get_job(
     let artifacts = artifacts_proj.get_artifacts(&tenant_id, &job_id).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     
-    // Get owner entity info
-    let owner_entity = sqlx::query!(
+    // Get owner entity info (using dynamic query)
+    let owner_entity = sqlx::query(
         r#"
         SELECT sid, display_name, kind
-        FROM id_subjects
+        FROM id_subject
         WHERE sid = $1
-        "#,
-        job_row.owner_entity_id
+        "#
     )
+    .bind(&owner_entity_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map(|r| serde_json::json!({
-        "entity_id": r.sid,
-        "display_name": r.display_name,
-        "kind": r.kind,
-    }))
+    .map(|r| {
+        let sid: String = r.get("sid");
+        let display_name: String = r.get("display_name");
+        let kind: String = r.get("kind");
+        serde_json::json!({
+            "entity_id": sid,
+            "display_name": display_name,
+            "kind": kind,
+        })
+    })
     .unwrap_or_else(|| serde_json::json!({
-        "entity_id": job_row.owner_entity_id,
+        "entity_id": owner_entity_id,
         "display_name": "Unknown",
         "kind": "unknown",
     }));
     
     // Parse available_actions
-    let available_actions: Vec<serde_json::Value> = job_row.available_actions
+    let available_actions: Vec<serde_json::Value> = available_actions_json
         .as_ref()
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     
     Ok(Json(JobResponse {
-        job_id: job_row.job_id,
-        title: job_row.title,
-        goal: job_row.goal,
-        state: job_row.state,
+        job_id: job_job_id,
+        title: job_title,
+        goal: job_goal,
+        state: job_state,
         owner: owner_entity,
         available_actions,
         timeline,

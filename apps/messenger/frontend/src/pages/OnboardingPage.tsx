@@ -7,32 +7,50 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, Users, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { Building2, Users, ArrowRight, Loader2, Sparkles, Copy, Check } from 'lucide-react';
 import { api } from '../services/apiClient';
 import toast from 'react-hot-toast';
 
-// Generate a simple invite code
-const generateInviteCode = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) {
-    if (i === 4) code += '-';
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-};
+// Types for tenant API responses
+interface TenantInfo {
+  tenant_id: string;
+  name: string;
+  slug: string;
+  status: string;
+  created_at: string;
+}
+
+interface CreateTenantResponse {
+  tenant: TenantInfo;
+  invite_code: string;
+}
+
+interface JoinTenantResponse {
+  tenant: TenantInfo;
+}
 
 export const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   
   const [mode, setMode] = useState<'choice' | 'create' | 'join'>('choice');
   const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   
   // Create tenant
   const [tenantName, setTenantName] = useState('');
+  const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
   
   // Join tenant
   const [inviteCode, setInviteCode] = useState('');
+
+  const handleCopyInviteCode = () => {
+    if (createdInviteCode) {
+      navigator.clipboard.writeText(createdInviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('Invite code copied!');
+    }
+  };
 
   const handleCreateTenant = async () => {
     if (!tenantName.trim()) {
@@ -42,41 +60,45 @@ export const OnboardingPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const tenantId = `tenant_${Date.now()}`;
-      const inviteCode = generateInviteCode();
-      
-      // Create tenant event in UBL ledger
-      await api.post('/link/commit', {
-        container_id: `tenant://${tenantId}`,
-        event_type: 'tenant.created',
-        payload: {
-          tenant_id: tenantId,
-          name: tenantName,
-          invite_code: inviteCode,
-          created_at: new Date().toISOString()
-        }
+      // Call the new tenant API
+      const response = await api.post<CreateTenantResponse>('/tenant', {
+        name: tenantName
       });
       
-      // Save to localStorage
-      localStorage.setItem('ubl_tenant_id', tenantId);
-      localStorage.setItem('ubl_tenant_name', tenantName);
-      localStorage.setItem('ubl_tenant_role', 'owner');
-      localStorage.setItem('ubl_tenant_invite_code', inviteCode);
+      const { tenant, invite_code } = response;
       
-      toast.success(`${tenantName} created! Invite code: ${inviteCode}`);
-      navigate('/');
+      // Save to localStorage
+      localStorage.setItem('ubl_tenant_id', tenant.tenant_id);
+      localStorage.setItem('ubl_tenant_name', tenant.name);
+      localStorage.setItem('ubl_tenant_role', 'owner');
+      localStorage.setItem('ubl_tenant_invite_code', invite_code);
+      
+      // Show invite code for sharing
+      setCreatedInviteCode(invite_code);
+      toast.success(`${tenantName} created!`);
     } catch (err: any) {
       console.error('Create tenant error:', err);
-      // For demo mode, still save locally
+      // For demo mode, simulate creation
       const tenantId = `tenant_${Date.now()}`;
+      const demoCode = Array.from({length: 8}, (_, i) => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        return (i === 4 ? '-' : '') + chars[Math.floor(Math.random() * chars.length)];
+      }).join('').slice(0, 9);
+      
       localStorage.setItem('ubl_tenant_id', tenantId);
       localStorage.setItem('ubl_tenant_name', tenantName);
       localStorage.setItem('ubl_tenant_role', 'owner');
+      localStorage.setItem('ubl_tenant_invite_code', demoCode);
+      
+      setCreatedInviteCode(demoCode);
       toast.success(`${tenantName} created! (demo mode)`);
-      navigate('/');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleContinueAfterCreate = () => {
+    navigate('/');
   };
 
   const handleJoinTenant = async () => {
@@ -87,41 +109,37 @@ export const OnboardingPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // TODO: Validate invite code against UBL ledger
-      // For now, accept any code format
-      if (inviteCode.replace(/-/g, '').length < 4) {
-        throw new Error('Invalid invite code format');
-      }
-      
-      // Simulate joining - in production, fetch tenant info from ledger
-      const tenantId = `tenant_${inviteCode.replace(/-/g, '').toLowerCase()}`;
-      
-      // Record join event
-      await api.post('/link/commit', {
-        container_id: `tenant://${tenantId}`,
-        event_type: 'tenant.member_joined',
-        payload: {
-          tenant_id: tenantId,
-          invite_code: inviteCode,
-          joined_at: new Date().toISOString()
-        }
+      // Call the new tenant join API
+      const response = await api.post<JoinTenantResponse>('/tenant/join', {
+        code: inviteCode.toUpperCase()
       });
       
-      localStorage.setItem('ubl_tenant_id', tenantId);
-      localStorage.setItem('ubl_tenant_name', `Team ${inviteCode.slice(0, 4)}`);
+      const { tenant } = response;
+      
+      localStorage.setItem('ubl_tenant_id', tenant.tenant_id);
+      localStorage.setItem('ubl_tenant_name', tenant.name);
       localStorage.setItem('ubl_tenant_role', 'member');
       
-      toast.success('Joined organization!');
+      toast.success(`Joined ${tenant.name}!`);
       navigate('/');
     } catch (err: any) {
       console.error('Join tenant error:', err);
-      // For demo mode, still save locally
-      const tenantId = `tenant_${inviteCode.replace(/-/g, '').toLowerCase()}`;
-      localStorage.setItem('ubl_tenant_id', tenantId);
-      localStorage.setItem('ubl_tenant_name', `Team ${inviteCode.slice(0, 4)}`);
-      localStorage.setItem('ubl_tenant_role', 'member');
-      toast.success('Joined organization! (demo mode)');
-      navigate('/');
+      const errorMsg = err.response?.data?.error || 'Failed to join';
+      
+      if (errorMsg.includes('Invalid') || errorMsg.includes('expired')) {
+        toast.error('Invalid or expired invite code');
+      } else if (errorMsg.includes('already')) {
+        toast.error('You already belong to an organization');
+        navigate('/');
+      } else {
+        // For demo mode
+        const tenantId = `tenant_${inviteCode.replace(/-/g, '').toLowerCase()}`;
+        localStorage.setItem('ubl_tenant_id', tenantId);
+        localStorage.setItem('ubl_tenant_name', `Team ${inviteCode.slice(0, 4)}`);
+        localStorage.setItem('ubl_tenant_role', 'member');
+        toast.success('Joined organization! (demo mode)');
+        navigate('/');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -209,41 +227,89 @@ export const OnboardingPage: React.FC = () => {
             animate={{ opacity: 1, x: 0 }}
             className="space-y-6"
           >
-            <button
-              onClick={() => setMode('choice')}
-              className="text-sm text-text-tertiary hover:text-text-primary transition-colors"
-            >
-              ← Back
-            </button>
+            {!createdInviteCode ? (
+              <>
+                <button
+                  onClick={() => setMode('choice')}
+                  className="text-sm text-text-tertiary hover:text-text-primary transition-colors"
+                >
+                  ← Back
+                </button>
 
-            <div>
-              <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2">
-                Organization Name
-              </label>
-              <input
-                type="text"
-                value={tenantName}
-                onChange={e => setTenantName(e.target.value)}
-                placeholder="Acme Corp"
-                className="w-full px-4 py-3 bg-bg-elevated border border-border-default rounded-xl text-text-primary placeholder-text-tertiary outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
-                autoFocus
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2">
+                    Organization Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantName}
+                    onChange={e => setTenantName(e.target.value)}
+                    placeholder="Acme Corp"
+                    className="w-full px-4 py-3 bg-bg-elevated border border-border-default rounded-xl text-text-primary placeholder-text-tertiary outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
+                    autoFocus
+                  />
+                </div>
 
-            <button
-              onClick={handleCreateTenant}
-              disabled={isLoading || !tenantName.trim()}
-              className="w-full py-4 bg-accent hover:bg-accent-hover disabled:bg-accent/50 text-white font-bold text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-3"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Building2 className="w-5 h-5" />
-                  Create Organization
-                </>
-              )}
-            </button>
+                <button
+                  onClick={handleCreateTenant}
+                  disabled={isLoading || !tenantName.trim()}
+                  className="w-full py-4 bg-accent hover:bg-accent-hover disabled:bg-accent/50 text-white font-bold text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-3"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Building2 className="w-5 h-5" />
+                      Create Organization
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              // Show invite code after creation
+              <>
+                <div className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/20 flex items-center justify-center">
+                    <Check className="w-8 h-8 text-success" />
+                  </div>
+                  <h2 className="text-xl font-bold text-text-primary mb-2">
+                    {tenantName} Created!
+                  </h2>
+                  <p className="text-sm text-text-tertiary">
+                    Share this invite code with your team
+                  </p>
+                </div>
+
+                <div className="bg-bg-elevated border border-border-default rounded-2xl p-6">
+                  <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3 text-center">
+                    Invite Code
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 px-4 py-3 bg-bg-base border border-border-default rounded-xl text-center font-mono text-xl tracking-widest text-text-primary">
+                      {createdInviteCode}
+                    </div>
+                    <button
+                      onClick={handleCopyInviteCode}
+                      className="p-3 bg-bg-base border border-border-default rounded-xl hover:border-accent transition-all"
+                    >
+                      {copied ? (
+                        <Check className="w-5 h-5 text-success" />
+                      ) : (
+                        <Copy className="w-5 h-5 text-text-tertiary" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleContinueAfterCreate}
+                  className="w-full py-4 bg-accent hover:bg-accent-hover text-white font-bold text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-3"
+                >
+                  Continue to Messenger
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
           </motion.div>
         )}
 

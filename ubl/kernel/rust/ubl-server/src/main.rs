@@ -51,6 +51,7 @@ mod crypto;
 mod webauthn_store;
 mod keystore;
 mod snapshots;
+mod tenant;
 
 use axum::{
     extract::{Path, State},
@@ -680,6 +681,8 @@ async fn main() -> anyhow::Result<()> {
             pool.clone(),
             std::env::var("OFFICE_URL").unwrap_or_else(|_| "http://localhost:8081".to_string())
         ))
+        // Tenant Management (C.Tenant)
+        .merge(tenant::tenant_routes().with_state(pool.clone()))
         .layer(cors);
 
     // Prompt 3: Unix Socket support - REQUIRED for security
