@@ -1,8 +1,8 @@
-# 🔥 Trinity Wiring Complete
+# 🔥 UBL 3.0 Wiring Complete
 
 ## What Was Built
 
-The Flagship Trinity is now fully wired:
+UBL 3.0 is now fully wired:
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐

@@ -1,4 +1,4 @@
-# 🔬 UBL Flagship Trinity — Technical Review
+# 🔬 UBL 3.0 — Technical Review
 
 **Revisor:** Claude  
 **Data:** 28 Dezembro 2025  

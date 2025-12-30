@@ -91,7 +91,7 @@ export const INITIAL_CONVERSATIONS: Conversation[] = [
     participants: ['user-joao', PERSONAL_AGENT_ID],
     isGroup: false,
     unreadCount: 1,
-    lastMessage: '🔔 Trinity infrastructure synchronized.',
+    lastMessage: '🔔 UBL 3.0 infrastructure synchronized.',
     lastMessageTime: '2m'
   },
   {
@@ -127,7 +127,7 @@ export const INITIAL_MESSAGES: Message[] = [
     id: 'tx-001',
     from: PERSONAL_AGENT_ID,
     to: 'user-joao',
-    content: 'Welcome to UBL Protocol v2.0. Your local ledger node has been initialized. The Trinity infrastructure is fully operational.',
+    content: 'Welcome to UBL Protocol v2.0. Your local ledger node has been initialized. The UBL 3.0 infrastructure is fully operational.',
     timestamp: minutesAgo(60),
     status: 'sent',
     hash: '0X8A2F9B1C3D5E7F9A',
@@ -157,7 +157,7 @@ export const INITIAL_MESSAGES: Message[] = [
     id: 'tx-004',
     from: PERSONAL_AGENT_ID,
     to: 'user-joao',
-    content: '🔔 Trinity infrastructure synchronized. Ready to process jobs and approvals.',
+    content: '🔔 UBL 3.0 infrastructure synchronized. Ready to process jobs and approvals.',
     timestamp: minutesAgo(2),
     status: 'sent',
     hash: '0X9A0B2C4D6E8F0A1B',

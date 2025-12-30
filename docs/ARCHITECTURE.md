@@ -1,10 +1,10 @@
-# UBL Flagship Trinity Architecture
+# UBL 3.0 Architecture
 
 **Three independent systems working together to realize the LogLine Foundation vision**
 
 ## Overview
 
-The UBL Flagship Trinity consists of three separate, independently deployable systems that communicate via APIs, WebSockets, and event streams:
+UBL 3.0 consists of three separate, independently deployable systems that communicate via APIs, WebSockets, and event streams:
 
 ```
 ┌─────────────────────────────────────────────────────┐

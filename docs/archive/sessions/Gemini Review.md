@@ -1,4 +1,4 @@
-Esta é a **Lista de Consolidação Final** para o lançamento do UBL Flagship Trinity.
+Esta é a **Lista de Consolidação Final** para o lançamento do UBL 3.0.
 
 Filtrei todo o ruído. Abaixo estão apenas os pontos onde a arquitetura não convencional colide com a realidade de produção. Se você resolver estes pontos, o sistema para de ser um código acadêmico e vira um produto robusto.
 

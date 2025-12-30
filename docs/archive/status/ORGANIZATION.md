@@ -4,7 +4,7 @@
 
 ## Structure Overview
 
-The codebase has been reorganized according to the Flagship Trinity specification with strict separation and no code duplication:
+The codebase has been reorganized according to the UBL 3.0 specification with strict separation and no code duplication:
 
 ```
 OFFICE-main/

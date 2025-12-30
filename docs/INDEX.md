@@ -1,6 +1,6 @@
 # 📚 UBL Documentation Index
 
-> Complete navigation for the UBL Flagship Trinity documentation.
+> Complete navigation for UBL 3.0 documentation.
 
 ## 🎯 Start Here
 

@@ -1,4 +1,4 @@
-# Trinity Stack - Docker Compose
+# UBL 3.0 Stack - Docker Compose
 # Usage: docker compose -f docker-compose.stack.yml up
 
 version: '3.8'
@@ -9,7 +9,7 @@ services:
   # ============================================================================
   postgres:
     image: postgres:15-alpine
-    container_name: trinity-postgres
+    container_name: ubl3-postgres
     environment:
       POSTGRES_DB: ubl_ledger
       POSTGRES_USER: ubl
@@ -31,7 +31,7 @@ services:
     build:
       context: ./ubl/kernel/rust/ubl-server
       dockerfile: Dockerfile
-    container_name: trinity-ubl
+    container_name: ubl3-server
     environment:
       HOST: 0.0.0.0
       PORT: 8080
@@ -55,7 +55,7 @@ services:
     build:
       context: ./office/office
       dockerfile: Dockerfile
-    container_name: trinity-office
+    container_name: ubl3-office
     environment:
       HOST: 0.0.0.0
       PORT: 8787
@@ -82,7 +82,7 @@ services:
     build:
       context: ./ubl-messenger/backend
       dockerfile: Dockerfile
-    container_name: trinity-messenger-backend
+    container_name: ubl3-messenger-backend
     environment:
       HOST: 0.0.0.0
       PORT: 4000
@@ -110,7 +110,7 @@ services:
     build:
       context: ./ubl-messenger/frontend
       dockerfile: Dockerfile
-    container_name: trinity-messenger-frontend
+    container_name: ubl3-messenger-frontend
     environment:
       VITE_API_BASE_URL: http://localhost:4000
     ports:
@@ -125,7 +125,7 @@ volumes:
 
 networks:
   default:
-    name: trinity-network
+    name: ubl3-network
 
 
 

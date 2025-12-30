@@ -1,4 +1,4 @@
-# 🔺 The Flagship Trinity — Wiring Complete
+# 🔺 UBL 3.0 — Wiring Complete
 
 **Date:** 2025-12-27
 

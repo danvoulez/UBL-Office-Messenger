@@ -1,4 +1,4 @@
-# Contributing to UBL Flagship Trinity
+# Contributing to UBL 3.0
 
 > **Truth is not what you say. Truth is what you can prove.**
 

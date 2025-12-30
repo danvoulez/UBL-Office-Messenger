@@ -2,7 +2,7 @@
 name = "golden-tests"
 version = "0.1.0"
 edition = "2021"
-description = "🏆 Golden Tests for Trinity Integration (Messenger ↔ UBL ↔ OFFICE)"
+description = "🏆 Golden Tests for UBL 3.0 Integration (Messenger ↔ UBL ↔ OFFICE)"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

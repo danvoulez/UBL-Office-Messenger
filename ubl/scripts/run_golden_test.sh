@@ -2,14 +2,14 @@
 #
 # 🏆 GOLDEN TEST RUNNER
 # 
-# Runs the complete Trinity integration test suite
+# Runs the complete UBL 3.0 integration test suite
 #
 
 set -e
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
-echo "🏆 GOLDEN TEST - Trinity Integration Validation"
+echo "🏆 GOLDEN TEST - UBL 3.0 Integration Validation"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
 echo "Testing:"
@@ -19,7 +19,7 @@ echo "  • Job Lifecycle State Machine"
 echo "  • WebSocket Event Handling"
 echo "  • UBL Ledger Events"
 echo "  • Policy VM Security"
-echo "  • End-to-End Trinity Flow"
+echo "  • End-to-End UBL 3.0 Flow"
 echo "  • Security Primitives"
 echo ""
 echo "══════════════════════════════════════════════════════════════"
@@ -62,7 +62,7 @@ echo "════════════════════════�
 echo "🏆 ALL GOLDEN TESTS COMPLETE!"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
-echo "Trinity Integration Verified:"
+echo "UBL 3.0 Integration Verified:"
 echo "  ✅ Messenger → UBL (Messages, Jobs)"
 echo "  ✅ UBL → OFFICE (Audit, Execution)"
 echo "  ✅ OFFICE → Messenger (Results, Cards)"

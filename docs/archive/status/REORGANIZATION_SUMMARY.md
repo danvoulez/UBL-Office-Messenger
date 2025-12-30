@@ -5,7 +5,7 @@
 
 ## Objective
 
-Reorganize the codebase into three independent systems according to the Flagship Trinity specification:
+Reorganize the codebase into three independent systems according to the UBL 3.0 specification:
 1. **UBL Messenger** - User-facing WhatsApp-like interface
 2. **OFFICE** - LLM Operating System runtime
 3. **UBL Ledger** - Immutable event-sourced ledger

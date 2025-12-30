@@ -1,12 +1,12 @@
-# 🔌 WIRING GUIDE: The Flagship Trinity
+# 🔌 WIRING GUIDE: UBL 3.0
 
 ## Overview
 
-The UBL Flagship Trinity consists of three interconnected systems:
+UBL 3.0 consists of three interconnected systems:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                          🔥 THE FLAGSHIP TRINITY 🔥                          │
+│                              🔥 UBL 3.0 🔥                                   │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │   ┌─────────────────┐    REST/WS     ┌─────────────────┐                    │
@@ -488,7 +488,7 @@ High-risk operations require multi-signature approval:
 
 ## Summary
 
-The Flagship Trinity is a **production-grade, cryptographically-verified, event-sourced** system where:
+UBL 3.0 is a **production-grade, cryptographically-verified, event-sourced** system where:
 
 1. **UBL Kernel** is the immutable source of truth
 2. **Office** is the intelligent executor that gives LLMs dignity
