@@ -59,6 +59,9 @@ All formal specifications are in `ubl/specs/`:
 |-----|-------|
 | [ADR-001](adrs/ADR-UBL-Console-001.v1.md) | Console API v1.1 |
 | [ADR-002](adrs/ADR-UBL-Registry-002.md) | Office Git Registry |
+| [ADR-003](adrs/ADR-003-Three-Systems.md) | Three Independent Systems |
+| [ADR-004](adrs/ADR-004-Zona-Schengen.md) | Zona Schengen (Authorization) |
+| [ADR-005](adrs/ADR-005-Append-Only-Ledger.md) | Append-Only Ledger |
 
 ---
 
