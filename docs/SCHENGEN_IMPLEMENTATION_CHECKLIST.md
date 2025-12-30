@@ -10,46 +10,54 @@ A base já existe! O UBL implementa corretamente:
 ✅ **Ed25519 Verification** - Toda ação é assinada
 ✅ **Constitution Rules** - L0-L5 com step-up
 ✅ **C.Tenant** - Isolamento por organização
+✅ **tenant_id na Session** - Propagação implementada!
+✅ **Extração em routes** - messenger_gateway usa tenant da sessão
 
 ## O Que Falta
 
-### 1. Propagar tenant_id na Sessão
+### ~~1. Propagar tenant_id na Sessão~~ ✅ IMPLEMENTADO
 
 **Arquivo:** `ubl/kernel/rust/ubl-server/src/auth/session.rs`
 
 ```rust
-// Adicionar tenant_id ao struct Session
+// FEITO: tenant_id adicionado ao struct Session
 pub struct Session {
     pub token: String,
     pub sid: Uuid,
-    pub tenant_id: Option<String>,  // ← NOVO
+    pub tenant_id: Option<String>,  // ✅ Zona Schengen
     pub flavor: SessionFlavor,
     pub scope: serde_json::Value,
     pub exp_unix: i64,
 }
 ```
 
-**Arquivo:** `ubl/sql/00_base/001_identity.sql`
+### ~~2. session_db.rs atualizado~~ ✅ IMPLEMENTADO
 
-```sql
--- Atualizar id_session para incluir tenant_id
-ALTER TABLE id_session 
-ADD COLUMN tenant_id TEXT REFERENCES id_tenant(tenant_id);
-```
+- INSERT inclui tenant_id
+- SELECT retorna tenant_id
+- Queries convertidas para dinâmicas (sem DATABASE_URL)
 
-### 2. Extrair tenant_id dos Headers
+### ~~3. Login seta tenant_id~~ ✅ IMPLEMENTADO
 
-**Arquivo:** `ubl/kernel/rust/ubl-server/src/messenger_gateway/routes.rs`
+**Arquivo:** `id_routes.rs`
 
 ```rust
-// Mudar de:
-let tenant_id = "default"; // TODO: Extract from session
-
-// Para:
-let tenant_id = get_session(&pool, &headers)
+// FEITO: Após login, busca tenant do usuário
+let user_tenant = tenant::db::get_user_tenant(&state.pool, &final_sid)
     .await
-    .and_then(|s| s.tenant_id)
-    .ok_or((StatusCode::FORBIDDEN, "No tenant context"))?;
+    .ok()
+    .flatten();
+
+let session = Session::new_regular_with_tenant(final_sid_uuid, user_tenant);
+```
+
+### ~~4. Routes usam tenant da sessão~~ ✅ IMPLEMENTADO
+
+**Arquivo:** `messenger_gateway/routes.rs`
+
+```rust
+// FEITO: Usa tenant_id da sessão em vez de hardcoded
+let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
 ```
 
 ### 3. Assinatura Client-Side
