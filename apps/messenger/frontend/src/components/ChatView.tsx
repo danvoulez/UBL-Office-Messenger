@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Conversation, Message, Entity, Contact, MessagePart } from '../types';
 import { Icons } from '../constants';
 import JobCardRenderer from './cards/JobCardRenderer';
+import { TaskCreationModal, TaskDraft } from './modals';
 
 interface ChatViewProps {
   conversation: Conversation;
@@ -14,6 +15,7 @@ interface ChatViewProps {
   entities: Entity[];
   currentUser: Entity;
   onSendMessage: (content: string, type?: string) => void;
+  onCreateTask?: (task: TaskDraft) => void;
   onBack?: () => void;
   onInspectEntity?: (entity: Entity, initialTab?: 'profile' | 'settings') => void;
   onViewJobDetails?: (jobId: string) => void;
@@ -26,12 +28,14 @@ const ChatView: React.FC<ChatViewProps> = ({
   entities,
   currentUser,
   onSendMessage,
+  onCreateTask,
   onBack,
   onInspectEntity,
   onViewJobDetails,
   isTyping = false
 }) => {
   const [inputText, setInputText] = useState('');
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -67,6 +71,16 @@ const ChatView: React.FC<ChatViewProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleCreateTask = (task: TaskDraft) => {
+    if (onCreateTask) {
+      onCreateTask(task);
+    } else {
+      // Fallback: send as a message with task metadata
+      const taskMessage = `📋 **Nova Tarefa: ${task.title}**\n\n${task.description}${task.deadline ? `\n\n⏰ Prazo: ${new Date(task.deadline).toLocaleString()}` : ''}${task.estimatedCost ? `\n💰 Custo: ${task.estimatedCost}` : ''}`;
+      onSendMessage(taskMessage, 'command');
     }
   };
 
@@ -261,8 +275,12 @@ const ChatView: React.FC<ChatViewProps> = ({
       <footer className="px-6 py-4 bg-bg-elevated border-t border-border-subtle">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end gap-3 bg-bg-surface border border-border-default rounded-2xl p-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 transition-all">
-            {/* Attach Button */}
-            <button className="w-9 h-9 flex items-center justify-center text-text-tertiary hover:bg-bg-hover hover:text-text-primary rounded-xl transition-colors flex-shrink-0">
+            {/* Task Button (+ to start a task) */}
+            <button 
+              onClick={() => setIsTaskModalOpen(true)}
+              className="w-9 h-9 flex items-center justify-center text-accent hover:bg-accent/10 hover:text-accent rounded-xl transition-colors flex-shrink-0"
+              title="Iniciar Tarefa"
+            >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -297,17 +315,24 @@ const ChatView: React.FC<ChatViewProps> = ({
             </button>
           </div>
           
-          {/* Ledger Info */}
-          <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-text-tertiary">
+          <p className="text-[10px] text-text-tertiary text-center mt-3">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse-soft"></span>
               Ledger Synced
             </span>
             <span>•</span>
             <span className="font-mono">{messages.length} entries</span>
-          </div>
+          </p>
         </div>
       </footer>
+
+      {/* Task Creation Modal */}
+      <TaskCreationModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        onSubmit={handleCreateTask}
+        conversationContext={inputText.trim() || undefined}
+      />
     </div>
   );
 };
