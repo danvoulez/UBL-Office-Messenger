@@ -35,6 +35,7 @@ export const VirtualizedList = React.forwardRef<VirtualizedListHandle, Props<any
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  const [autoStick, setAutoStick] = useState(true); // follow tail when user is at bottom
   const raf = useRaf();
 
   const total = items.length;
@@ -53,7 +54,11 @@ export const VirtualizedList = React.forwardRef<VirtualizedListHandle, Props<any
     if (!el) return;
     const onScroll = () => {
       const top = el.scrollTop;
-      raf(() => setScrollTop(top));
+      const atBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < itemHeight * 1.5;
+      raf(() => {
+        setScrollTop(top);
+        setAutoStick(atBottom);
+      });
     };
     const onResize = () => {
       raf(() => setViewportH(el.clientHeight));
@@ -74,6 +79,14 @@ export const VirtualizedList = React.forwardRef<VirtualizedListHandle, Props<any
       el.scrollTop = el.scrollHeight;
     },
   }));
+
+  // If new items arrive and user is near bottom, keep sticking to tail
+  useEffect(() => {
+    if (!autoStick) return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [items.length, autoStick]);
 
   const offsetY = firstIndex * itemHeight;
 

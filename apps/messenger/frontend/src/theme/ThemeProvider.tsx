@@ -38,7 +38,20 @@ export const ThemeProvider: React.FC<React.PropsWithChildren<{ initialRole?: Rol
     localStorage.setItem('ubl.role', role);
     setHtmlRole(role);
     setMetaThemeColor(role);
+    // iOS status bar style hint
+    const ios = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (ios) {
+      ios.setAttribute('content', 'black-translucent');
+    }
   }, [role]);
+
+  // DEV override via querystring ?role=admin
+  useEffect(() => {
+    const qp = new URLSearchParams(location.search);
+    const r = qp.get('role');
+    if (r === 'admin' || r === 'user') setRole(r as Role);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = useMemo(() => ({ role, setRole }), [role]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
