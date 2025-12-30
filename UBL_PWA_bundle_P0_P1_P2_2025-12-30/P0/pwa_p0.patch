@@ -1,0 +1,324 @@
+*** Begin Patch
+*** Add File: apps/messenger/frontend/public/manifest.json
++{
++  "name": "UBL Messenger",
++  "short_name": "UBL",
++  "id": "ubl.messenger",
++  "start_url": "/?mode=pwa",
++  "display": "standalone",
++  "background_color": "#ffffff",
++  "theme_color": "#ff6a2b",
++  "scope": "/",
++  "icons": [
++    { "src": "/icons/ubl-32.jpg",  "sizes": "32x32",   "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-48.jpg",  "sizes": "48x48",   "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-64.jpg",  "sizes": "64x64",   "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-96.jpg",  "sizes": "96x96",   "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-128.jpg", "sizes": "128x128", "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-192.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-256.jpg", "sizes": "256x256", "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-384.jpg", "sizes": "384x384", "type": "image/jpeg", "purpose": "any maskable" },
++    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any maskable" }
++  ]
++}
++
+*** End Patch
+*** Add File: apps/messenger/frontend/src/theme/tokens.css
++:root {
++  --brand: #ff6a2b;
++  --brand-contrast: #ffffff;
++  --brand-muted: #ffe8df;
++  --surface: #ffffff;
++  --surface-2: #fafafa;
++  --text: #111827;
++  --text-muted: #6b7280;
++}
++
++/* Role-driven theming. Toggle by setting data-role="admin" on <html>. */
++[data-role="admin"] {
++  --brand: #1479ff;
++  --brand-contrast: #ffffff;
++  --brand-muted: #e7f0ff;
++}
++
++/* Helper tokens used by simple components */
++.brand-bg { background-color: var(--brand); color: var(--brand-contrast); }
++.brand-border { border-color: var(--brand); }
++.brand-muted { background-color: var(--brand-muted); }
++
+*** End Patch
+*** Add File: apps/messenger/frontend/src/theme/ThemeProvider.tsx
++import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
++
++type Role = 'user' | 'admin';
++
++type ThemeCtx = {
++  role: Role;
++  setRole: (r: Role) => void;
++};
++
++const ThemeContext = createContext<ThemeCtx | null>(null);
++
++function setHtmlRole(role: Role) {
++  const html = document.documentElement;
++  html.setAttribute('data-role', role === 'admin' ? 'admin' : 'user');
++}
++
++function setMetaThemeColor(role: Role) {
++  const color = role === 'admin' ? '#1479ff' : '#ff6a2b';
++  let el = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
++  if (!el) {
++    el = document.createElement('meta');
++    el.name = 'theme-color';
++    document.head.appendChild(el);
++  }
++  el.content = color;
++}
++
++export const ThemeProvider: React.FC<React.PropsWithChildren<{ initialRole?: Role }>> = ({
++  children,
++  initialRole = 'user',
++}) => {
++  const [role, setRole] = useState<Role>(() => {
++    const fromStorage = (localStorage.getItem('ubl.role') as Role | null) || initialRole;
++    return fromStorage === 'admin' ? 'admin' : 'user';
++  });
++
++  useEffect(() => {
++    localStorage.setItem('ubl.role', role);
++    setHtmlRole(role);
++    setMetaThemeColor(role);
++  }, [role]);
++
++  const value = useMemo(() => ({ role, setRole }), [role]);
++  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
++};
++
++export function useTheme() {
++  const ctx = useContext(ThemeContext);
++  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
++  return ctx;
++}
++
++/**
++ * Convenience helper: call this with your bootstrap payload to flip the theme on the fly.
++ * It expects something like { user: { role: 'admin' | 'user' } }.
++ */
++export function applyBootstrapRole(bootstrap: any, setter: (role: Role) => void) {
++  try {
++    const role: Role = (bootstrap?.user?.role === 'admin' ? 'admin' : 'user') as Role;
++    setter(role);
++  } catch {
++    // ignore and keep current role
++  }
++}
++
+*** End Patch
+*** Add File: apps/messenger/frontend/src/hooks/useSSE.ts
++import { useCallback, useEffect, useRef, useState } from 'react';
++
++export type SSEEventType =
++  | 'hello'
++  | 'timeline.append'
++  | 'timeline.update'
++  | 'job.update'
++  | 'presence.update'
++  | 'heartbeat'
++  | 'error';
++
++export type Handlers = Partial<Record<SSEEventType, (e: MessageEvent) => void>>;
++
++const CURSOR_KEY = 'ubl.sse.cursor';
++
++function getBaseUrl() {
++  // Prefer an explicit Gateway base; fall back to UBL url or origin.
++  const a = (import.meta as any).env?.VITE_API_BASE_URL;
++  const b = (import.meta as any).env?.VITE_UBL_URL;
++  return (a || b || window.location.origin).replace(/\/+$/, '');
++}
++
++export function useSSE(handlers: Handlers = {}, tenantId = 'default') {
++  const [connected, setConnected] = useState(false);
++  const [cursor, setCursor] = useState<string>(() => localStorage.getItem(CURSOR_KEY) || '');
++  const esRef = useRef<EventSource | null>(null);
++  const retryRef = useRef(0);
++  const timerRef = useRef<number | null>(null);
++
++  const cleanup = useCallback(() => {
++    if (timerRef.current) window.clearTimeout(timerRef.current);
++    timerRef.current = null;
++    if (esRef.current) {
++      esRef.current.close();
++      esRef.current = null;
++    }
++  }, []);
++
++  const connect = useCallback(() => {
++    cleanup();
++    const url = `${getBaseUrl()}/v1/stream?tenant_id=${encodeURIComponent(
++      tenantId,
++    )}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
++
++    const es = new EventSource(url, { withCredentials: true });
++    esRef.current = es;
++
++    const saveCursor = (id: string | null) => {
++      if (!id) return;
++      localStorage.setItem(CURSOR_KEY, id);
++      setCursor(id);
++    };
++
++    const onOpen = () => {
++      retryRef.current = 0;
++      setConnected(true);
++    };
++
++    const onError = () => {
++      setConnected(false);
++      es.close();
++      const attempt = Math.min(retryRef.current + 1, 6);
++      retryRef.current = attempt;
++      // Exponential backoff: 1s,2s,4s,8s,16s,30s caps
++      const delay = attempt < 6 ? Math.pow(2, attempt - 1) * 1000 : 30000;
++      timerRef.current = window.setTimeout(connect, delay);
++    };
++
++    es.onopen = onOpen;
++    es.onerror = onError;
++
++    // Generic message fallback: capture Last-Event-ID header (not always exposed),
++    // but many servers publish it as the event id.
++    es.onmessage = (e) => {
++      if (e.lastEventId) saveCursor(e.lastEventId);
++    };
++
++    const bind = (type: SSEEventType) => {
++      es.addEventListener(type, (e: MessageEvent) => {
++        // @ts-ignore: non-standard, but many servers set id here.
++        const id = (e as any).lastEventId || (e as any).id || null;
++        if (id) saveCursor(id as string);
++        const h = handlers[type];
++        if (h) h(e);
++      });
++    };
++
++    (['hello', 'timeline.append', 'timeline.update', 'job.update', 'presence.update', 'heartbeat', 'error'] as SSEEventType[]).forEach(
++      bind,
++    );
++  }, [cleanup, cursor, handlers, tenantId]);
++
++  useEffect(() => {
++    connect();
++    return cleanup;
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [tenantId]);
++
++  return { connected, cursor, reconnect: connect, disconnect: cleanup };
++}
++
+*** End Patch
+*** Add File: apps/messenger/frontend/src/components/VirtualizedList.tsx
++import React, { CSSProperties, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
++
++export type VirtualizedListHandle = {
++  scrollToBottom: () => void;
++};
++
++type Props<T> = {
++  items: T[];
++  itemHeight: number; // fixed height in px
++  overscan?: number;
++  className?: string;
++  style?: CSSProperties;
++  renderRow: (item: T, index: number) => React.ReactNode;
++};
++
++function clamp(v: number, min: number, max: number) {
++  return Math.max(min, Math.min(max, v));
++}
++
++function useRaf() {
++  const rafRef = useRef<number | null>(null);
++  return (fn: () => void) => {
++    if (rafRef.current) cancelAnimationFrame(rafRef.current);
++    rafRef.current = requestAnimationFrame(() => {
++      fn();
++      rafRef.current = null;
++    });
++  };
++}
++
++export const VirtualizedList = React.forwardRef<VirtualizedListHandle, Props<any>>(function VirtualizedList<T>(
++  { items, itemHeight, overscan = 6, className, style, renderRow }: Props<T>,
++  ref,
++) {
++  const containerRef = useRef<HTMLDivElement | null>(null);
++  const [scrollTop, setScrollTop] = useState(0);
++  const [viewportH, setViewportH] = useState(0);
++  const raf = useRaf();
++
++  const total = items.length;
++  const totalHeight = total * itemHeight;
++
++  const firstIndex = clamp(Math.floor(scrollTop / itemHeight) - overscan, 0, Math.max(total - 1, 0));
++  const lastIndex = clamp(
++    Math.floor((scrollTop + viewportH) / itemHeight) + overscan,
++    0,
++    Math.max(total - 1, 0),
++  );
++  const slice = useMemo(() => items.slice(firstIndex, lastIndex + 1), [items, firstIndex, lastIndex]);
++
++  useEffect(() => {
++    const el = containerRef.current;
++    if (!el) return;
++    const onScroll = () => {
++      const top = el.scrollTop;
++      raf(() => setScrollTop(top));
++    };
++    const onResize = () => {
++      raf(() => setViewportH(el.clientHeight));
++    };
++    onResize();
++    el.addEventListener('scroll', onScroll, { passive: true });
++    window.addEventListener('resize', onResize);
++    return () => {
++      el.removeEventListener('scroll', onScroll);
++      window.removeEventListener('resize', onResize);
++    };
++  }, [raf]);
++
++  useImperativeHandle(ref, () => ({
++    scrollToBottom() {
++      const el = containerRef.current;
++      if (!el) return;
++      el.scrollTop = el.scrollHeight;
++    },
++  }));
++
++  const offsetY = firstIndex * itemHeight;
++
++  return (
++    <div
++      ref={containerRef}
++      className={className}
++      style={{ overflow: 'auto', willChange: 'transform', ...style }}
++    >
++      <div style={{ position: 'relative', height: totalHeight, width: '100%' }}>
++        <div style={{ position: 'absolute', top: offsetY, left: 0, right: 0 }}>
++          {slice.map((item, i) => {
++            const index = firstIndex + i;
++            return (
++              <div key={index} style={{ height: itemHeight, overflow: 'hidden' }}>
++                {renderRow(item, index)}
++              </div>
++            );
++          })}
++        </div>
++      </div>
++    </div>
++  );
++});
++
++export default VirtualizedList;
++
+*** End Patch

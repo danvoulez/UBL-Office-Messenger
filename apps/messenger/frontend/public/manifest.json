@@ -1,25 +1,25 @@
 {
   "name": "UBL Messenger",
-  "short_name": "Messenger",
+  "short_name": "UBL",
+  "id": "ubl.messenger",
   "description": "Secure messaging on the Universal Business Ledger",
-  "start_url": "/",
+  "start_url": "/?mode=pwa",
   "display": "standalone",
-  "background_color": "#0f0f0f",
-  "theme_color": "#e07a5f",
+  "background_color": "#ffffff",
+  "theme_color": "#ff6a2b",
   "orientation": "portrait-primary",
+  "scope": "/",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/ubl-32.jpg",  "sizes": "32x32",   "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-48.jpg",  "sizes": "48x48",   "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-64.jpg",  "sizes": "64x64",   "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-96.jpg",  "sizes": "96x96",   "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-128.jpg", "sizes": "128x128", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-192.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-256.jpg", "sizes": "256x256", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-384.jpg", "sizes": "384x384", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/icons/apple-touch-icon-180x180.jpg", "sizes": "180x180", "type": "image/jpeg", "purpose": "any" }
   ]
 }
 

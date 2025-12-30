@@ -1,0 +1,271 @@
+
+*** Begin Patch
+*** Update File: public/manifest.json
+@@
+ {
+   "name": "UBL Messenger",
+   "short_name": "UBL",
+-  "start_url": "/",
+-  "display": "standalone",
+-  "theme_color": "#E75A2F",
+-  "background_color": "#ffffff",
++  "start_url": "/?source=pwa",
++  "display": "standalone",
++  "theme_color": "#E75A2F",
++  "background_color": "#ffffff",
+   "icons": [
+     { "src": "/icons/ubl-32.jpg",  "sizes": "32x32",   "type": "image/jpeg" },
+     { "src": "/icons/ubl-48.jpg",  "sizes": "48x48",   "type": "image/jpeg" },
+     { "src": "/icons/ubl-64.jpg",  "sizes": "64x64",   "type": "image/jpeg" },
+     { "src": "/icons/ubl-96.jpg",  "sizes": "96x96",   "type": "image/jpeg" },
+     { "src": "/icons/ubl-128.jpg", "sizes": "128x128", "type": "image/jpeg" },
+     { "src": "/icons/ubl-192.jpg", "sizes": "192x192", "type": "image/jpeg" },
+-    { "src": "/icons/ubl-256.jpg", "sizes": "256x256", "type": "image/jpeg" },
+-    { "src": "/icons/ubl-384.jpg", "sizes": "384x384", "type": "image/jpeg" },
+-    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg" }
++    { "src": "/icons/ubl-256.jpg", "sizes": "256x256", "type": "image/jpeg" },
++    { "src": "/icons/ubl-384.jpg", "sizes": "384x384", "type": "image/jpeg" },
++    { "src": "/icons/ubl-512.jpg", "sizes": "512x512", "type": "image/jpeg" }
+   ]
+ }
+*** End Patch
+
+*** Begin Patch
+*** Update File: index.html
+@@
+-  <meta name="theme-color" content="#E75A2F" />
++  <meta name="theme-color" content="#E75A2F" id="theme-color-meta"/>
++  <!-- iOS PWA tweaks -->
++  <meta name="apple-mobile-web-app-capable" content="yes">
++  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
++  <link rel="apple-touch-icon" href="/icons/ubl-192.jpg">
+*** End Patch
+
+*** Begin Patch
+*** Update File: src/main.tsx
+@@
+-import { createRoot } from 'react-dom/client'
++import { createRoot } from 'react-dom/client'
++
++// Register Service Worker for installability + offline shell
++if ('serviceWorker' in navigator) {
++  window.addEventListener('load', () => {
++    navigator.serviceWorker.register('/sw.js').catch(() => {});
++  });
++}
+*** End Patch
+
+*** Begin Patch
+*** Update File: src/theme/ThemeProvider.tsx
+@@
+-  useEffect(() => {
+-    document.documentElement.setAttribute('data-role', role)
+-    // update theme-color meta for Android Chrome
+-    const meta = document.querySelector('meta[name="theme-color"]')
+-    if (meta) {
+-      meta.setAttribute('content', role === 'admin' ? '#1E72B7' : '#E75A2F')
+-    }
+-  }, [role])
++  useEffect(() => {
++    document.documentElement.setAttribute('data-role', role)
++    // update theme-color meta for Android Chrome
++    const meta = document.querySelector('meta[name="theme-color"], #theme-color-meta') as HTMLMetaElement | null
++    if (meta) {
++      meta.setAttribute('content', role === 'admin' ? '#1E72B7' : '#E75A2F')
++    }
++    // iOS status bar style hint (cannot set color dynamically, but ensure translucency)
++    const ios = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
++    if (ios) {
++      ios.setAttribute('content', 'black-translucent')
++    }
++  }, [role])
++
++  // DEV override via querystring ?role=admin
++  useEffect(() => {
++    const qp = new URLSearchParams(location.search);
++    const r = qp.get('role');
++    if (r === 'admin' || r === 'user') setRole(r as any);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [])
+*** End Patch
+
+*** Begin Patch
+*** Update File: src/hooks/useSSE.ts
+@@
+-  const connect = useCallback(() => {
++  const connect = useCallback(() => {
+     if (esRef.current) esRef.current.close();
+@@
+-    const es = new EventSource(url, { withCredentials: true });
++    const es = new EventSource(url, { withCredentials: true });
+     esRef.current = es;
++
++    // Heartbeat/idle detection: if nothing arrives in 30s, reopen
++    let lastTick = Date.now();
++    const heartbeat = setInterval(() => {
++      if (Date.now() - lastTick > 30000) {
++        try { es.close(); } catch {}
++        scheduleReconnect();
++      }
++    }, 10000);
+@@
+-    es.addEventListener('open', () => {
++    es.addEventListener('open', () => {
+       setConnected(true);
+       backoffRef.current = 1000;
+       onHello?.();
++      lastTick = Date.now();
+     });
+@@
+-    es.addEventListener('error', () => {
++    es.addEventListener('error', () => {
+       setConnected(false);
+-      es.close();
++      try { es.close(); } catch {}
+       scheduleReconnect();
+     });
+@@
+-    const handle = (ev: MessageEvent) => {
++    const handle = (ev: MessageEvent) => {
+       try {
+         const parsed = JSON.parse(ev.data);
+         if (parsed?.cursor) {
+           localStorage.setItem(CURSOR_KEY, parsed.cursor);
+         }
++        lastTick = Date.now();
+       } catch {}
+     };
+@@
+-    es.addEventListener('timeline.append', onTimelineAppend ?? handle);
+-    es.addEventListener('job.update', onJobUpdate ?? handle);
+-    es.addEventListener('presence.update', onPresenceUpdate ?? handle);
++    es.addEventListener('timeline.append', onTimelineAppend ?? handle);
++    es.addEventListener('job.update', onJobUpdate ?? handle);
++    es.addEventListener('presence.update', onPresenceUpdate ?? handle);
++
++    // Page visibility handling: pause SSE when hidden to save battery, resume with cursor on show
++    const onVisibility = () => {
++      if (document.hidden) {
++        try { es.close(); } catch {}
++      } else {
++        scheduleReconnect(0);
++      }
++    };
++    document.addEventListener('visibilitychange', onVisibility);
+@@
+-    return () => {
+-      es.close();
+-      setConnected(false);
+-    };
++    return () => {
++      try { es.close(); } catch {}
++      clearInterval(heartbeat);
++      document.removeEventListener('visibilitychange', onVisibility);
++      setConnected(false);
++    };
+   }, [tenantId, onHello, onTimelineAppend, onJobUpdate, onPresenceUpdate, scheduleReconnect]);
+*** End Patch
+
+*** Begin Patch
+*** Update File: src/components/VirtualizedList.tsx
+@@
+-export default function VirtualizedList<T>({
+-  items,
+-  itemHeight,
+-  overscan = 6,
+-  renderRow,
+-  className,
+-}: Props<T>) {
++export default function VirtualizedList<T>({
++  items,
++  itemHeight,
++  overscan = 6,
++  renderRow,
++  className,
++}: Props<T>) {
+   const containerRef = useRef<HTMLDivElement | null>(null);
+   const [scrollTop, setScrollTop] = useState(0);
+   const [height, setHeight] = useState(0);
++  const [autoStick, setAutoStick] = useState(true); // follow tail when user is at bottom
+@@
+-  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+-    setScrollTop(e.currentTarget.scrollTop);
+-  };
++  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
++    const el = e.currentTarget;
++    setScrollTop(el.scrollTop);
++    const atBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < itemHeight * 1.5;
++    setAutoStick(atBottom);
++  };
+@@
+-  useEffect(() => {
+-    const el = containerRef.current;
+-    if (!el) return;
+-    const ro = new ResizeObserver(() => setHeight(el.clientHeight));
+-    ro.observe(el);
+-    return () => ro.disconnect();
+-  }, []);
++  useEffect(() => {
++    const el = containerRef.current;
++    if (!el) return;
++    const ro = new ResizeObserver(() => setHeight(el.clientHeight));
++    ro.observe(el);
++    return () => ro.disconnect();
++  }, []);
++
++  // If new items arrive and user is near bottom, keep sticking to tail
++  useEffect(() => {
++    if (!autoStick) return;
++    const el = containerRef.current;
++    if (!el) return;
++    el.scrollTop = el.scrollHeight;
++  }, [items.length, autoStick]);
+*** End Patch
+
+*** Begin Patch
+*** Add File: public/sw.js
++// Tiny offline-first shell for UBL Messenger
++const VERSION = 'pwa-p1';
++const CORE = [
++  '/',
++  '/index.html',
++  '/manifest.json',
++  '/icons/ubl-192.jpg',
++  '/icons/ubl-512.jpg'
++];
++
++self.addEventListener('install', (e) => {
++  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
++});
++
++self.addEventListener('activate', (e) => {
++  e.waitUntil(
++    caches.keys().then(keys =>
++      Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))
++    ).then(() => self.clients.claim())
++  );
++});
++
++self.addEventListener('fetch', (e) => {
++  const req = e.request;
++  // Network-first for dynamic JSON/APIs, cache-first for static assets
++  const isGET = req.method === 'GET';
++  const isStatic = /\.(?:js|css|jpg|jpeg|png|svg|ico|html|json)$/.test(new URL(req.url).pathname);
++  if (!isGET) return; // let non-GET pass-through
++
++  if (isStatic) {
++    e.respondWith(
++      caches.match(req).then(cached => cached || fetch(req).then(res => {
++        const clone = res.clone();
++        caches.open(VERSION).then(c => c.put(req, clone));
++        return res;
++      }))
++    );
++  } else if (req.headers.get('accept')?.includes('text/html')) {
++    // HTML shell: try network, fall back to cached index
++    e.respondWith(
++      fetch(req).catch(() => caches.match('/index.html'))
++    );
++  }
++});
+*** End Patch

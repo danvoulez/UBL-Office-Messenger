@@ -1,0 +1,43 @@
+diff --git a/apps/messenger/frontend/public/manifest.json b/apps/messenger/frontend/public/manifest.json
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/public/manifest.json
+@@
++{
++  "name": "UBL Messenger",
++  "short_name": "UBL",
++  "description": "Ledger-native messaging for work",
++  "start_url": "/",
++  "display": "standalone",
++  "scope": "/",
++  "theme_color": "#E4551E",
++  "background_color": "#FFFFFF",
++  "icons": [
++    { "src": "/icons/icon-192-orange.png", "sizes": "192x192", "type": "image/png" },
++    { "src": "/icons/icon-512-orange.png", "sizes": "512x512", "type": "image/png" },
++    { "src": "/icons/maskable-512-orange.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable any" }
++  ]
++}
+diff --git a/apps/messenger/frontend/public/index.html b/apps/messenger/frontend/public/index.html
+index 2222222..3333333 100644
+--- a/apps/messenger/frontend/public/index.html
++++ b/apps/messenger/frontend/public/index.html
+@@
+-  <meta name="theme-color" content="#ffffff" />
++  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-orange.png"/>
++  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-orange.png" />
++  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16-orange.png" />
++  <meta name="theme-color" content="#E4551E" />
++  <!-- Optional: swap to blue at runtime for admins -->
++  <script>
++    (function() {
++      try {
++        const adminFlag = localStorage.getItem('is_admin') === '1';
++        if (adminFlag) {
++          const meta = document.querySelector('meta[name="theme-color"]');
++          if (meta) meta.setAttribute('content', '#1565C0');
++        }
++      } catch (_) {}
++    })();
++  </script>

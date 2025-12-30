@@ -1,0 +1,271 @@
+diff --git a/apps/messenger/frontend/src/index.tsx b/apps/messenger/frontend/src/index.tsx
+index 1111111..2222222 100644
+--- a/apps/messenger/frontend/src/index.tsx
++++ b/apps/messenger/frontend/src/index.tsx
+@@ -1,6 +1,9 @@
+ import React from 'react'
+ import ReactDOM from 'react-dom/client'
+ import App from './App'
++// Accent utilities (safe to import multiple times)
++import './theme/accents.css'
++
+ import './index.css'
+ 
+ ReactDOM.createRoot(document.getElementById('root')!).render(
+@@ -10,5 +13,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
+     <React.StrictMode>
+       <App />
+     </React.StrictMode>,
+-)
++)
+diff --git a/apps/messenger/frontend/src/theme/accents.css b/apps/messenger/frontend/src/theme/accents.css
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/src/theme/accents.css
+@@ -0,0 +1,118 @@
++/* Accent utilities built on top of --accent-* CSS variables.
++   Works with either .theme-orange or .theme-blue on the <html> element. */
++
++:root {
++  --accent-50:  #fff7ed;
++  --accent-100: #ffedd5;
++  --accent-200: #fed7aa;
++  --accent-300: #fdba74;
++  --accent-400: #fb923c;
++  --accent-500: #f97316;
++  --accent-600: #ea580c;
++  --accent-700: #c2410c;
++  --accent-800: #9a3412;
++  --accent-900: #7c2d12;
++  --accent-950: #431407;
++}
++
++/* If your ThemeProvider already sets these vars, the rules below are no-ops,
++   but we keep them for resilience. */
++.theme-blue {
++  --accent-50:  #eff6ff;
++  --accent-100: #dbeafe;
++  --accent-200: #bfdbfe;
++  --accent-300: #93c5fd;
++  --accent-400: #60a5fa;
++  --accent-500: #3b82f6;
++  --accent-600: #2563eb;
++  --accent-700: #1d4ed8;
++  --accent-800: #1e40af;
++  --accent-900: #1e3a8a;
++  --accent-950: #172554;
++}
++
++.btn-accent {
++  background: var(--accent-600);
++  color: white;
++  border-radius: 0.5rem;
++  padding: 0.5rem 0.875rem;
++  font-weight: 600;
++  transition: filter .15s ease, transform .02s ease;
++  border: 1px solid transparent;
++}
++.btn-accent:hover { filter: brightness(1.05); }
++.btn-accent:active { transform: translateY(1px); }
++.btn-accent:disabled { opacity: .55; cursor: not-allowed; }
++
++.btn-accent-outline {
++  background: transparent;
++  color: var(--accent-700);
++  border: 1px solid var(--accent-300);
++  border-radius: 0.5rem;
++  padding: 0.5rem 0.875rem;
++  font-weight: 600;
++}
++.btn-accent-outline:hover { background: var(--accent-50); }
++
++.link-accent {
++  color: var(--accent-700);
++  text-underline-offset: 2px;
++}
++.link-accent:hover {
++  color: var(--accent-800);
++  text-decoration: underline;
++}
++
++.badge-accent {
++  display: inline-flex;
++  align-items: center;
++  gap: .375rem;
++  padding: .125rem .5rem;
++  border-radius: 999px;
++  background: var(--accent-50);
++  color: var(--accent-700);
++  border: 1px solid var(--accent-200);
++  font-size: .75rem;
++  font-weight: 600;
++}
++
++.ring-accent {
++  outline: 2px solid transparent;
++  outline-offset: 2px;
++  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-500) 45%, transparent);
++}
++
++.progress-accent {
++  height: 6px;
++  width: 100%;
++  background: color-mix(in oklab, var(--accent-200) 50%, #0000);
++  border-radius: 999px;
++  position: relative;
++  overflow: hidden;
++}
++.progress-accent > .bar {
++  position: absolute;
++  inset: 0;
++  width: var(--value, 0%);
++  background: var(--accent-600);
++  border-radius: 999px;
++  transition: width .2s ease;
++}
++
++.dot {
++  width: .5rem;
++  height: .5rem;
++  border-radius: 999px;
++  display: inline-block;
++}
++.dot.green { background: #22c55e; }
++.dot.yellow { background: #eab308; }
++.dot.red { background: #ef4444; }
++.dot.gray { background: #9ca3af; }
++.dot.blue { background: var(--accent-600); }
++
++/* Skeletons */
++.skeleton {
++  border-radius: .5rem;
++  background: linear-gradient(90deg,
++    color-mix(in oklab, var(--accent-50) 40%, #fafafa),
++    color-mix(in oklab, var(--accent-100) 60%, #f3f4f6),
++    color-mix(in oklab, var(--accent-50) 40%, #fafafa));
++  background-size: 200% 100%;
++  animation: pulse 1.2s ease-in-out infinite;
++}
++@keyframes pulse {
++  0% { background-position: 0% 0; }
++  100% { background-position: -200% 0; }
++}
+diff --git a/apps/messenger/frontend/src/components/ui/Skeleton.tsx b/apps/messenger/frontend/src/components/ui/Skeleton.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/src/components/ui/Skeleton.tsx
+@@ -0,0 +1,31 @@
++import React from 'react'
++
++type Props = {
++  className?: string
++  lines?: number
++}
++
++export default function Skeleton({ className = '', lines = 1 }: Props) {
++  if (lines <= 1) return <div className={`skeleton ${className}`} />
++  return (
++    <div className={className}>
++      {Array.from({ length: lines }).map((_, i) => (
++        <div
++          key={i}
++          className="skeleton"
++          style={{
++            height: 12,
++            marginTop: i === 0 ? 0 : 10,
++            width: i === lines - 1 ? '70%' : '100%',
++          }}
++        />
++      ))}
++    </div>
++  )
++}
+diff --git a/apps/messenger/frontend/src/components/ui/AccentButton.tsx b/apps/messenger/frontend/src/components/ui/AccentButton.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/src/components/ui/AccentButton.tsx
+@@ -0,0 +1,46 @@
++import React from 'react'
++
++type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
++  variant?: 'solid' | 'outline'
++  className?: string
++}
++
++export function AccentButton({ variant = 'solid', className = '', ...rest }: Props) {
++  const base = variant === 'solid' ? 'btn-accent' : 'btn-accent-outline'
++  return <button {...rest} className={`${base} ${className}`} />
++}
+diff --git a/apps/messenger/frontend/src/components/ui/PresenceBadge.tsx b/apps/messenger/frontend/src/components/ui/PresenceBadge.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/src/components/ui/PresenceBadge.tsx
+@@ -0,0 +1,30 @@
++import React from 'react'
++
++type State = 'online' | 'working' | 'waiting_on_you' | 'offline' | 'busy' | 'away'
++
++function colorClass(state: State) {
++  switch (state) {
++    case 'online': return 'green'
++    case 'working': return 'yellow'
++    case 'waiting_on_you': return 'red'
++    case 'busy': return 'blue'
++    case 'away': return 'yellow'
++    default: return 'gray'
++  }
++}
++
++export function PresenceBadge({ state, label }: { state: State, label?: string }) {
++  const color = colorClass(state)
++  return (
++    <span className="badge-accent">
++      <span className={`dot ${color}`} />
++      {label ?? state.replaceAll('_', ' ')}
++    </span>
++  )
++}
+diff --git a/apps/messenger/frontend/src/components/system/DemoBanner.tsx b/apps/messenger/frontend/src/components/system/DemoBanner.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/messenger/frontend/src/components/system/DemoBanner.tsx
+@@ -0,0 +1,35 @@
++import React from 'react'
++
++function getFlag(): boolean {
++  try {
++    return localStorage.getItem('demo') === '1' || localStorage.getItem('demo_mode') === '1'
++  } catch { return false }
++}
++
++export default function DemoBanner() {
++  const [on, setOn] = React.useState(getFlag())
++
++  React.useEffect(() => {
++    const onStorage = () => setOn(getFlag())
++    window.addEventListener('storage', onStorage)
++    return () => window.removeEventListener('storage', onStorage)
++  }, [])
++
++  if (!on) return null
++  return (
++    <div style={{
++      background: 'color-mix(in oklab, var(--accent-100) 70%, white)',
++      color: 'var(--accent-800)',
++      borderBottom: '1px solid var(--accent-200)',
++      padding: '8px 12px',
++      fontWeight: 600,
++      display: 'flex',
++      alignItems: 'center',
++      gap: 8,
++    }}>
++      <span className="dot blue" />
++      Demo Mode — data may be simulated. <span style={{ opacity: .7 }}>(toggle with: localStorage.setItem('demo','1'|'0'))</span>
++    </div>
++  )
++}

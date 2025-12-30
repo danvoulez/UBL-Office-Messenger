@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './lib/toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, useAuthContext } from './context/AuthContext';
+import { ThemeProvider } from './theme/ThemeProvider';
 import { FullPageSpinner } from './components/ui';
 
 // Lazy load pages for code splitting
@@ -95,12 +96,14 @@ const AppRoutes: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <AuthProvider>
-          <ToastProvider />
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <ToastProvider />
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

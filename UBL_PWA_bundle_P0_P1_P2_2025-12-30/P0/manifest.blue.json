@@ -1,0 +1,28 @@
+{
+  "name": "UBL Messenger",
+  "short_name": "UBL",
+  "description": "Ledger-native messaging for work",
+  "start_url": "/",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#1565C0",
+  "background_color": "#FFFFFF",
+  "icons": [
+    {
+      "src": "/icons/icon-192-blue.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-blue.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-512-blue.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ]
+}

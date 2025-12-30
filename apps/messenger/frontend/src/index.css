@@ -2,6 +2,8 @@
  * UBL Messenger — Tailwind + Custom Styles
  */
 
+@import './theme/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

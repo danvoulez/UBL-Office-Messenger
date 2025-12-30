@@ -1,0 +1,16 @@
+{
+  "shortcuts": [
+    {
+      "name": "Novo Workstream",
+      "short_name": "Workstream",
+      "url": "/#/new",
+      "description": "Criar rapidamente um novo workstream"
+    },
+    {
+      "name": "Abrir Office",
+      "short_name": "Office",
+      "url": "/#/office",
+      "description": "Abrir o Office runtime"
+    }
+  ]
+}
