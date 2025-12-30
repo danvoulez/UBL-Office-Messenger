@@ -13,8 +13,14 @@ import { FullPageSpinner } from './components/ui';
 
 // Lazy load pages for code splitting
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const OnboardingPage = React.lazy(() => import('./pages/OnboardingPage'));
 const ChatPage = React.lazy(() => import('./pages/ChatPage'));
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'));
+
+// Check if user has completed onboarding (has tenant)
+const hasTenant = () => {
+  return !!localStorage.getItem('ubl_tenant_id');
+};
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -26,6 +32,31 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Check if onboarding completed
+  if (!hasTenant()) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Onboarding Route wrapper (must be authenticated, but no tenant yet)
+const OnboardingRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuthContext();
+
+  if (isLoading) {
+    return <FullPageSpinner message="Loading..." />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Already has tenant, go to app
+  if (hasTenant()) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -40,6 +71,10 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (isAuthenticated) {
+    // If logged in but no tenant, go to onboarding
+    if (!hasTenant()) {
+      return <Navigate to="/onboarding" replace />;
+    }
     return <Navigate to="/" replace />;
   }
 
@@ -57,6 +92,16 @@ const AppRoutes: React.FC = () => {
             <PublicRoute>
               <LoginPage />
             </PublicRoute>
+          }
+        />
+
+        {/* Onboarding Route */}
+        <Route
+          path="/onboarding"
+          element={
+            <OnboardingRoute>
+              <OnboardingPage />
+            </OnboardingRoute>
           }
         />
 
