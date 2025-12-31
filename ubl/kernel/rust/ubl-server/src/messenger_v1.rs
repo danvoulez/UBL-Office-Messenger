@@ -229,6 +229,8 @@ async fn send_message(
     
     // 4. Build canonical atom (SPEC-UBL-ATOM v1.0 compliant)
     // Keys MUST be sorted lexicographically
+    // Fix #5: Include tenant_id for proper isolation
+    let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let atom = serde_json::json!({
         "content_hash": content_hash,
         "conversation_id": req.conversation_id,
@@ -236,6 +238,7 @@ async fn send_message(
         "from": user.sid,
         "id": message_id,
         "message_type": req.message_type,
+        "tenant_id": tenant_id,
         "type": "message.created"
     });
     
@@ -318,6 +321,8 @@ async fn create_conversation(
     let now_iso = now.format(&time::format_description::well_known::Rfc3339).unwrap();
     
     // 3. Build canonical atom
+    // Fix #5: Include tenant_id for proper isolation
+    let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let mut participants = req.participants.clone();
     if !participants.contains(&user.sid) {
         participants.push(user.sid.clone());
@@ -331,6 +336,7 @@ async fn create_conversation(
         "is_group": req.is_group || participants.len() > 2,
         "name": req.name.clone().unwrap_or_default(),
         "participants": participants,
+        "tenant_id": tenant_id,
         "type": "conversation.created"
     });
     
@@ -417,6 +423,8 @@ async fn job_decision(
         .ok_or((StatusCode::NOT_FOUND, "No pending approval for this job".to_string()))?;
     
     // 3. Build approval.decided atom
+    // Fix #5: Include tenant_id for proper isolation
+    let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let now = OffsetDateTime::now_utc();
     let now_iso = now.format(&time::format_description::well_known::Rfc3339).unwrap();
     
@@ -427,6 +435,7 @@ async fn job_decision(
         "decision": decision,
         "job_id": job_id,
         "reason": reason.unwrap_or_default(),
+        "tenant_id": tenant_id,
         "type": "approval.decided"
     });
     

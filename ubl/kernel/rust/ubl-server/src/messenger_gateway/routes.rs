@@ -175,6 +175,7 @@ async fn post_message(
     let content_hash = crate::messenger_v1::blake3_hex(&req.content);
     
     // Build canonical atom
+    // Fix #5: Include tenant_id for proper isolation
     let atom = serde_json::json!({
         "content_hash": content_hash,
         "conversation_id": conversation_id.clone(),
@@ -182,6 +183,7 @@ async fn post_message(
         "from": user.sid,
         "id": message_id.clone(),
         "message_type": req.message_type.as_deref().unwrap_or("text"),
+        "tenant_id": tenant_id,
         "type": "message.created"
     });
     

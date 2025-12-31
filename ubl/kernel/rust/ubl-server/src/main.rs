@@ -387,7 +387,10 @@ async fn route_commit(
                     
                     // Process projection in background (non-blocking)
                     tokio::spawn(async move {
-                        let tenant_id = "default"; // TODO: Extract from atom or session
+                        // Fix #5: Extract tenant_id from atom, falling back to "default" for migration
+                        let tenant_id = atom.get("tenant_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("default");
                         let event_type = event_type.as_str();
                         
                         if container_id == "C.Jobs" {
