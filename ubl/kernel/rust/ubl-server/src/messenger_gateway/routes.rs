@@ -315,6 +315,28 @@ async fn job_action(
         return Err((StatusCode::FORBIDDEN, "You don't have access to this job".to_string()));
     }
     
+    // Fix #8: Validate FSM transition is legal before calling Office
+    // This provides early validation at Gateway level
+    let current_state = &job.state;
+    let target_state = match req.action_type.as_str() {
+        "approve" => Some("approved"),
+        "reject" => Some("rejected"),
+        "cancel" => Some("cancelled"),
+        "complete" => Some("completed"),
+        "start" => Some("in_progress"),
+        "provide_input" => Some("in_progress"), // waiting_input → in_progress
+        _ => None,
+    };
+    
+    if let Some(to_state) = target_state {
+        let policy_engine = crate::policy::PolicyEngine::new(state.pool.clone());
+        if let Err(e) = policy_engine.validate_job_fsm(&job_id, current_state, to_state).await {
+            warn!("🚫 FSM violation at Gateway: {} → {} (job: {})", current_state, to_state, job_id);
+            return Err((StatusCode::BAD_REQUEST, format!("Invalid state transition: {}", e)));
+        }
+        info!("✅ FSM pre-check passed: {} → {} (job: {})", current_state, to_state, job_id);
+    }
+    
     // 3. Call Office to handle job action
     let office_req = super::office_client::JobActionRequest {
         job_id: job_id.clone(),
