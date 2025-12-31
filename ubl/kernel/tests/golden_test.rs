@@ -594,7 +594,7 @@ mod golden_test {
     use super::*;
 
     #[test]
-    fn test_complete_trinity_flow() {
+    fn test_complete_ubl_flow() {
         println!("\n🏆 GOLDEN TEST: Complete UBL 3.0 Flow\n");
         println!("═".repeat(60));
 

@@ -34,12 +34,11 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## What Changed (Migration from Trinity)
+## Architecture
 
-- **NO backend-node**: Deleted (was a demo stub)
-- **NO backend Rust**: Deleted (redundant with UBL)
-- **NO Office server**: Office governance is AOP in UBL + PWA
 - **Single backend**: All calls go to UBL Server
+- **Gateway pattern**: Messenger Gateway routes to Office
+- **Event-sourced**: All state changes via UBL ledger commits
 
 ## Development
 

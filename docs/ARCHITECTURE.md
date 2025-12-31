@@ -659,17 +659,13 @@ OFFICE-main/
 │
 └── docs/                               # Documentation
     ├── ARCHITECTURE.md                 # ★ This file
-    ├── TRINITY_WIRING.md               # Integration wiring
-    ├── DEPLOYMENT_RUNBOOK.md           # Deployment guide
-    ├── RUNBOOK.md                      # Operations guide
-    ├── ROADMAP.md                      # Future plans
-    ├── STATUS.md                       # Current status
+    ├── WIRING_GUIDE.md                 # Integration wiring
+    ├── RUNBOOK.md                      # Local development guide
+    ├── ROADMAP.md                      # Implementation status
+    ├── STATUS.md                       # Current system status
     │
     ├── adrs/                           # Architecture Decision Records
     │   └── ADR-UBL-Console-001.v1.md
-    │
-    ├── archive/                        # Archived docs
-    │   └── sessions/                   # Session work docs
     │
     └── devops/                         # DevOps documentation
         └── ...
@@ -688,14 +684,13 @@ OFFICE-main/
 - 🚧 Approval workflow: Integration pending
 
 ### Next Steps
-See `# 🎯🔥 PROMPT 3: THE FLAGSHIP TRINITY.ini` for complete roadmap.
+See [ROADMAP.md](./ROADMAP.md) for complete implementation status.
 
 ## References
 
-- [Universal Historical Specification](./UNIVERSAL-HISTORICAL-SPECIFICATION.md)
-- [LLM UX/UI Specification](./messenger/frontend/LLM%20UX/LLM-UI-UX.md)
-- [Office Discovery](./office/office/DISCOVERY.md)
-- [UBL Architecture](./UBL-Containers-main/ARCHITECTURE.md)
+- [ROADMAP](./ROADMAP.md) - Implementation status and next steps
+- [RUNBOOK](./RUNBOOK.md) - Local development guide
+- [STATUS](./STATUS.md) - System health overview
 
 ## License
 
