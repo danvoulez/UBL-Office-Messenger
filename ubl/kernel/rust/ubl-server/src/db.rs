@@ -1,10 +1,13 @@
 //! Database layer - PostgreSQL ledger with SERIALIZABLE transactions
 //! SPEC-UBL-LEDGER v1.0 compliant
+//!
+//! Fix #12: Includes retry logic for serialization conflicts (SQLSTATE 40001)
 
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use time::OffsetDateTime;
+use tracing::{info, warn};
 
 // Helper trait for getting columns by name (local to this module to avoid conflicts)
 trait DbRowExt {
@@ -73,6 +76,10 @@ pub enum TangencyError {
     RealityDrift,
     SequenceMismatch,
     PactViolation(String),
+    /// Fix #12: Serialization conflict (SQLSTATE 40001) - can be retried
+    SerializationConflict,
+    /// General database error
+    DatabaseError(String),
 }
 
 #[derive(Clone)]
@@ -87,18 +94,49 @@ impl PgLedger {
 
     /// Append transacional com SERIALIZABLE + FOR UPDATE
     /// SPEC-UBL-LEDGER v1.0 §7 - Atomicidade: validate → append → commit
+    /// 
+    /// Fix #12: Retries up to 3 times on serialization conflict (SQLSTATE 40001)
     pub async fn append(&self, link: &LinkDraft) -> Result<LedgerEntry, TangencyError> {
+        const MAX_RETRIES: u32 = 3;
+        
+        for attempt in 1..=MAX_RETRIES {
+            match self.try_append(link).await {
+                Ok(entry) => return Ok(entry),
+                Err(TangencyError::SerializationConflict) if attempt < MAX_RETRIES => {
+                    warn!(
+                        "⚠️ Serialization conflict on attempt {}/{} for container {}, retrying...",
+                        attempt, MAX_RETRIES, link.container_id
+                    );
+                    // Brief backoff: 10ms * attempt
+                    tokio::time::sleep(std::time::Duration::from_millis(10 * attempt as u64)).await;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        
+        Err(TangencyError::SerializationConflict)
+    }
+
+    /// Internal append attempt - may fail with SerializationConflict
+    async fn try_append(&self, link: &LinkDraft) -> Result<LedgerEntry, TangencyError> {
         // Begin SERIALIZABLE transaction
         let mut tx: Transaction<Postgres> = self
             .pool
             .begin()
             .await
-            .expect("tx begin");
+            .map_err(|e| {
+                warn!("Failed to begin transaction: {}", e);
+                TangencyError::DatabaseError(e.to_string())
+            })?;
         
         sqlx::query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
             .execute(&mut *tx)
             .await
-            .expect("serializable");
+            .map_err(|e| {
+                warn!("Failed to set isolation level: {}", e);
+                TangencyError::DatabaseError(e.to_string())
+            })?;
 
         // Lock and get latest entry (FOR UPDATE)
         let rec: Option<sqlx::postgres::PgRow> = sqlx::query(
@@ -114,7 +152,7 @@ impl PgLedger {
         .bind(&link.container_id)
         .fetch_optional(&mut *tx)
         .await
-        .expect("select last");
+        .map_err(|e| Self::classify_error(e))?;
 
         let (expected_prev, expected_seq) = match rec {
             Some(r) => {
@@ -169,7 +207,7 @@ impl PgLedger {
         .bind(ts_unix_ms)
         .execute(&mut *tx)
         .await
-        .expect("insert");
+        .map_err(|e| Self::classify_error(e))?;
 
         // Store atom data for projections (if provided)
         if let Some(ref atom_data) = link.atom {
@@ -186,11 +224,13 @@ impl PgLedger {
             .bind(ts_unix_ms)
             .execute(&mut *tx)
             .await
-            .expect("insert atom");
+            .map_err(|e| Self::classify_error(e))?;
         }
 
         // Commit transaction
-        tx.commit().await.expect("commit");
+        tx.commit().await.map_err(|e| Self::classify_error(e))?;
+
+        info!("✅ Ledger append: {} seq={}", link.container_id, expected_seq);
 
         Ok(LedgerEntry {
             container_id: link.container_id.clone(),
@@ -200,6 +240,20 @@ impl PgLedger {
             entry_hash,
             ts_unix_ms,
         })
+    }
+
+    /// Classify sqlx errors - detect serialization conflicts (SQLSTATE 40001)
+    fn classify_error(e: sqlx::Error) -> TangencyError {
+        // Check for PostgreSQL error with SQLSTATE 40001 (serialization_failure)
+        if let sqlx::Error::Database(ref db_err) = e {
+            if let Some(code) = db_err.code() {
+                if code == "40001" {
+                    warn!("🔄 Serialization conflict detected (40001)");
+                    return TangencyError::SerializationConflict;
+                }
+            }
+        }
+        TangencyError::DatabaseError(e.to_string())
     }
 
     /// Get current state of container

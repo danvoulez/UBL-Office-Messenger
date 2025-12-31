@@ -138,6 +138,46 @@ impl OfficeProjection {
         Ok(())
     }
 
+    /// Fix #10: Update entity presence in projection table
+    async fn update_presence(
+        &self,
+        entity_id: &str,
+        status: &str,
+        job_id: Option<&str>,
+        activity: Option<&str>,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        sqlx::query(
+            r#"
+            INSERT INTO office_presence (entity_id, status, current_job_id, current_activity, last_heartbeat_ms, last_action_ms, session_id, updated_at_ms)
+            VALUES ($1, $2, $3, $4, $5, $5, $6, $5)
+            ON CONFLICT (entity_id) DO UPDATE SET
+                status = $2,
+                current_job_id = COALESCE($3, office_presence.current_job_id),
+                current_activity = $4,
+                last_action_ms = $5,
+                session_id = COALESCE($6, office_presence.session_id),
+                updated_at_ms = $5
+            "#,
+        )
+        .bind(entity_id)
+        .bind(status)
+        .bind(job_id)
+        .bind(activity)
+        .bind(now_ms)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("✅ Presence updated: {} → {}", entity_id, status);
+        Ok(())
+    }
+
     async fn handle_session_started(&self, atom: &Value) -> anyhow::Result<()> {
         let entity_id = atom.get("entity_id").and_then(|v| v.as_str()).unwrap_or("");
         let session_id = atom.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
@@ -174,6 +214,9 @@ impl OfficeProjection {
         .bind(entity_id)
         .execute(&self.pool)
         .await?;
+
+        // Fix #10: Update presence to 'available' when session starts
+        self.update_presence(entity_id, "available", None, Some("Session started"), Some(session_id)).await?;
 
         info!("✅ Office projection: session.started {} for {}", session_id, entity_id);
         Ok(())

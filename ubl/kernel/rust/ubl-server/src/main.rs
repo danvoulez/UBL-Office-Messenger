@@ -495,6 +495,15 @@ async fn route_commit(
             error!("❌ REJECTED: PactViolation - {}", reason);
             Err((StatusCode::FORBIDDEN, format!("PactViolation: {}", reason)))
         }
+        // Fix #12: Handle serialization conflicts (should have been retried)
+        Err(TangencyError::SerializationConflict) => {
+            error!("❌ REJECTED: SerializationConflict after retries");
+            Err((StatusCode::CONFLICT, "SerializationConflict: please retry".into()))
+        }
+        Err(TangencyError::DatabaseError(reason)) => {
+            error!("❌ REJECTED: DatabaseError - {}", reason);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("DatabaseError: {}", reason)))
+        }
     }
 }
 
