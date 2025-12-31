@@ -1,6 +1,8 @@
 /**
  * WebAuthn Authentication Hook
  * Handles passkey registration and authentication with UBL Kernel
+ * 
+ * Fix #2: Now includes WebAuthn PRF extension for client-side Ed25519 signing
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -9,6 +11,13 @@ import {
   startAuthentication,
   browserSupportsWebAuthn,
 } from '@simplewebauthn/browser';
+import { 
+  deriveSigningKey, 
+  clearSigningKey, 
+  isClientSideSigningAvailable,
+  getPublicKeyForRegistration,
+  isPRFLikelySupported,
+} from '../services/crypto';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -24,7 +33,37 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  /** Fix #2: Whether client-side Ed25519 signing is available (PRF derived) */
+  canSignClientSide: boolean;
 }
+
+// ============================================================================
+// Base64url utilities for WebAuthn
+// ============================================================================
+
+function base64urlToArrayBuffer(base64url: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + padding;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function arrayBufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// ============================================================================
+// Hook
+// ============================================================================
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
@@ -32,10 +71,12 @@ export function useAuth() {
     isAuthenticated: false,
     isLoading: true,
     error: null,
+    canSignClientSide: false,
   });
 
   // Check if WebAuthn is supported
   const supportsWebAuthn = browserSupportsWebAuthn();
+  const supportsPRF = isPRFLikelySupported();
 
   // Load session on mount
   useEffect(() => {
@@ -56,6 +97,8 @@ export function useAuth() {
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated) {
+            // Note: On session restore, we don't have the signing key
+            // User needs to re-authenticate with PRF to enable client-side signing
             setState({
               user: {
                 sid: data.sid,
@@ -66,6 +109,7 @@ export function useAuth() {
               isAuthenticated: true,
               isLoading: false,
               error: null,
+              canSignClientSide: isClientSideSigningAvailable(),
             });
             return;
           }
@@ -149,16 +193,88 @@ export function useAuth() {
 
       const { challenge_id, public_key } = await beginRes.json();
 
-      // 2. Authenticate with browser
-      const credential = await startAuthentication(public_key);
+      // 2. Authenticate with browser + PRF extension (Fix #2)
+      // We use raw WebAuthn API to include PRF extension
+      const prfSalt = new TextEncoder().encode('ubl-ed25519-signing-v1');
+      
+      let credential: PublicKeyCredential | null = null;
+      let prfResult: ArrayBuffer | null = null;
+      
+      try {
+        // Try with PRF extension first
+        const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+          ...public_key,
+          challenge: base64urlToArrayBuffer(public_key.challenge),
+          allowCredentials: public_key.allowCredentials?.map((c: any) => ({
+            ...c,
+            id: base64urlToArrayBuffer(c.id),
+          })),
+          extensions: {
+            // @ts-ignore - PRF extension
+            prf: {
+              eval: {
+                first: prfSalt,
+              },
+            },
+          },
+        };
+        
+        credential = await navigator.credentials.get({
+          publicKey: publicKeyOptions,
+        }) as PublicKeyCredential;
+        
+        // Check for PRF results
+        const extensions = credential.getClientExtensionResults() as any;
+        if (extensions.prf?.results?.first) {
+          prfResult = extensions.prf.results.first;
+          console.log('PRF extension successful - client-side signing enabled');
+        } else {
+          console.log('PRF not supported by authenticator - using server-side signing');
+        }
+      } catch (prfError) {
+        // Fallback to standard authentication without PRF
+        console.warn('PRF extension failed, using standard auth:', prfError);
+        credential = await startAuthentication(public_key) as unknown as PublicKeyCredential;
+      }
 
-      // 3. Finish authentication - verify with server
+      if (!credential) {
+        throw new Error('Authentication cancelled');
+      }
+
+      // 3. If we got PRF material, derive signing key
+      let canSign = false;
+      if (prfResult) {
+        try {
+          await deriveSigningKey(new Uint8Array(prfResult));
+          canSign = true;
+          console.log('Ed25519 signing key derived from PRF');
+        } catch (deriveError) {
+          console.error('Failed to derive signing key:', deriveError);
+        }
+      }
+
+      // 4. Convert credential to format expected by server
+      const response = credential.response as AuthenticatorAssertionResponse;
+      const credentialForServer = {
+        id: credential.id,
+        rawId: arrayBufferToBase64url(credential.rawId),
+        type: credential.type,
+        response: {
+          authenticatorData: arrayBufferToBase64url(response.authenticatorData),
+          clientDataJSON: arrayBufferToBase64url(response.clientDataJSON),
+          signature: arrayBufferToBase64url(response.signature),
+          userHandle: response.userHandle ? arrayBufferToBase64url(response.userHandle) : null,
+        },
+        clientExtensionResults: credential.getClientExtensionResults(),
+      };
+
+      // 5. Finish authentication - verify with server
       const finishRes = await fetch(`${API_BASE}/id/login/finish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           challenge_id,
-          credential,
+          credential: credentialForServer,
         }),
       });
 
@@ -182,9 +298,10 @@ export function useAuth() {
         isAuthenticated: true,
         isLoading: false,
         error: null,
+        canSignClientSide: canSign,
       });
 
-      return { sid, username };
+      return { sid, username, canSignClientSide: canSign };
     } catch (err: any) {
       const message = err.message || 'Login failed';
       setState(s => ({ ...s, isLoading: false, error: message }));
@@ -196,11 +313,14 @@ export function useAuth() {
   const logout = useCallback(() => {
     localStorage.removeItem('ubl_session_token');
     localStorage.removeItem('ubl_demo_mode');
+    // Fix #2: Clear signing key on logout
+    clearSigningKey();
     setState({
       user: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      canSignClientSide: false,
     });
   }, []);
 
@@ -217,16 +337,19 @@ export function useAuth() {
       isAuthenticated: true,
       isLoading: false,
       error: null,
+      canSignClientSide: false, // Demo mode doesn't have real signing
     });
   }, []);
 
   return {
     ...state,
     supportsWebAuthn,
+    supportsPRF,
     registerPasskey,
     loginWithPasskey,
     loginDemo,
     logout,
+    // Fix #2: Expose signing utilities
+    getPublicKeyForRegistration,
   };
 }
-
