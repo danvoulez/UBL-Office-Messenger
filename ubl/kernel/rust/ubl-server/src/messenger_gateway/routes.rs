@@ -22,8 +22,11 @@ use crate::messenger_gateway::{idempotency::IdempotencyStore, office_client::Off
 
 use super::projections::GatewayProjections;
 
-// Reuse helper from messenger_v1
+// Reuse helpers from messenger_v1
 use crate::messenger_v1::{get_user_from_session, UserInfo};
+
+// Fix #1: Import signing function for real Ed25519 signatures
+use crate::messenger_v1::sign_link_draft;
 
 // ============================================================================
 // STATE
@@ -197,8 +200,8 @@ async fn post_message(
             ts_unix_ms: 0,
         });
     
-    // Build link draft
-    let link = crate::db::LinkDraft {
+    // Build and SIGN link draft (Fix #1: Real Ed25519)
+    let mut link = crate::db::LinkDraft {
         version: 1,
         container_id: container_id.to_string(),
         expected_sequence: container_state.sequence + 1,
@@ -207,10 +210,11 @@ async fn post_message(
         atom: Some(atom.clone()),
         intent_class: "Observation".to_string(),
         physics_delta: "0".to_string(),
-        author_pubkey: user.sid.clone(),
-        signature: "placeholder".to_string(), // TODO: Use actual signature
+        author_pubkey: String::new(), // Will be set by sign_link_draft
+        signature: String::new(),     // Will be set by sign_link_draft
         pact: None,
     };
+    sign_link_draft(&mut link);
     
     // Commit to ledger
     let entry = state.ledger.append(&link).await

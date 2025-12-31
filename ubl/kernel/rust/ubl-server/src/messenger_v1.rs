@@ -13,9 +13,18 @@
 //! All mutations follow the pattern:
 //! 1. Validate request
 //! 2. Build canonical ubl-atom
-//! 3. Create ubl-link (signed)
+//! 3. Create ubl-link (signed with REAL Ed25519)
 //! 4. POST /link/commit internally
 //! 5. Return result
+//!
+//! ## Signature Strategy (Fix #1)
+//! 
+//! The boundary layer uses a persistent "boundary" key to sign commits.
+//! This key is stored in the keystore and persists across restarts.
+//! 
+//! In production, consider:
+//! - Frontend signing via WebAuthn PRF (user's passkey)
+//! - Delegated signing (Office signs on behalf of user with consent)
 
 use axum::{
     extract::{Path, State},
@@ -31,6 +40,7 @@ use uuid::Uuid;
 
 use crate::auth;
 use crate::db::{LinkDraft, PgLedger};
+use crate::keystore;
 use crate::projections::{JobsProjection, MessagesProjection};
 
 // ============================================================================
@@ -245,8 +255,9 @@ async fn send_message(
             link_hash: "0x00".to_string(),
             ts_unix_ms: 0,
         });
-    // Note: In production, signature would be from user's passkey or delegated agent
-    let link = LinkDraft {
+    
+    // 7. Build and SIGN the link (Fix #1: Real Ed25519)
+    let mut link = LinkDraft {
         version: 1,
         container_id: container_id.to_string(),
         expected_sequence: container_state.sequence + 1,
@@ -255,10 +266,11 @@ async fn send_message(
         atom: Some(atom.clone()),
         intent_class: "Observation".to_string(),
         physics_delta: "0".to_string(),
-        author_pubkey: user.sid.clone(), // Simplified - would be actual pubkey
-        signature: "placeholder".to_string(), // Simplified - would be actual sig
+        author_pubkey: String::new(), // Will be set by sign_link_draft
+        signature: String::new(),     // Will be set by sign_link_draft
         pact: None,
     };
+    sign_link_draft(&mut link);
     
     // 8. Commit to ledger
     let entry = state.ledger.append(&link).await
@@ -339,8 +351,8 @@ async fn create_conversation(
             ts_unix_ms: 0,
         });
     
-    // 6. Build and commit link
-    let link = LinkDraft {
+    // 6. Build and SIGN the link (Fix #1: Real Ed25519)
+    let mut link = LinkDraft {
         version: 1,
         container_id: container_id.to_string(),
         expected_sequence: container_state.sequence + 1,
@@ -349,10 +361,11 @@ async fn create_conversation(
         atom: Some(atom),
         intent_class: "Observation".to_string(),
         physics_delta: "0".to_string(),
-        author_pubkey: user.sid.clone(),
-        signature: "placeholder".to_string(),
+        author_pubkey: String::new(), // Will be set by sign_link_draft
+        signature: String::new(),     // Will be set by sign_link_draft
         pact: None,
     };
+    sign_link_draft(&mut link);
     
     let entry = state.ledger.append(&link).await
         .map_err(|e| (StatusCode::CONFLICT, format!("Commit failed: {:?}", e)))?;
@@ -434,7 +447,8 @@ async fn job_decision(
             ts_unix_ms: 0,
         });
     
-    let link = LinkDraft {
+    // 6. Build and SIGN the link (Fix #1: Real Ed25519)
+    let mut link = LinkDraft {
         version: 1,
         container_id: container_id.to_string(),
         expected_sequence: container_state.sequence + 1,
@@ -443,10 +457,11 @@ async fn job_decision(
         atom: Some(atom),
         intent_class: "Observation".to_string(),
         physics_delta: "0".to_string(),
-        author_pubkey: user.sid.clone(),
-        signature: "placeholder".to_string(),
+        author_pubkey: String::new(), // Will be set by sign_link_draft
+        signature: String::new(),     // Will be set by sign_link_draft
         pact: None,
     };
+    sign_link_draft(&mut link);
     
     let entry = state.ledger.append(&link).await
         .map_err(|e| (StatusCode::CONFLICT, format!("Commit failed: {:?}", e)))?;
@@ -611,5 +626,49 @@ pub fn blake3_hex(data: &str) -> String {
 pub fn blake3_hex_bytes(data: &[u8]) -> String {
     let hash = blake3::hash(data);
     hash.to_hex().to_string()
+}
+
+// ============================================================================
+// SIGNING (Fix #1: Real Ed25519 Signatures)
+// ============================================================================
+
+/// Key ID for the boundary signing key
+const BOUNDARY_KEY_ID: &str = "boundary";
+
+/// Sign a link draft and return the completed link
+/// 
+/// Uses the persistent "boundary" key from keystore.
+/// This ensures signatures are real Ed25519 and commits pass membrane validation.
+pub fn sign_link_draft(link: &mut LinkDraft) {
+    // Build canonical signing data (must match main.rs verification)
+    let signing_data = serde_json::json!({
+        "version": link.version,
+        "container_id": link.container_id,
+        "expected_sequence": link.expected_sequence,
+        "previous_hash": link.previous_hash,
+        "atom_hash": link.atom_hash,
+        "intent_class": link.intent_class,
+        "physics_delta": link.physics_delta,
+        "pact": link.pact,
+    });
+    
+    // Canonicalize (sorted keys, no whitespace)
+    let signing_bytes = ubl_atom::canonicalize(&signing_data)
+        .expect("Failed to canonicalize link for signing");
+    
+    // Get public key for author field
+    link.author_pubkey = keystore::get_public_key_hex(BOUNDARY_KEY_ID);
+    
+    // Sign with boundary key
+    // Note: keystore::sign returns "ed25519:base64" format, but main.rs expects hex
+    // So we use the underlying key directly
+    let key = keystore::load_or_create(BOUNDARY_KEY_ID);
+    link.signature = ubl_kernel::sign(&key, &signing_bytes);
+}
+
+/// Get the public key of the boundary signer
+/// Useful for registering in id_subjects as an authorized signer
+pub fn get_boundary_pubkey() -> String {
+    keystore::get_public_key_hex(BOUNDARY_KEY_ID)
 }
 
