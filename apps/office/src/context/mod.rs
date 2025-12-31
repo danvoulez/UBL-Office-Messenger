@@ -9,5 +9,5 @@ mod memory;
 
 pub use frame::{ContextFrame, ContextHash, Affordance, Obligation, ObligationStatus, GuardianInfo, FrameSummary};
 pub use builder::ContextFrameBuilder;
-pub use narrator::{Narrator, NarrativeConfig};
+pub use narrator::{Narrator, NarrativeConfig, ToolInfo};
 pub use memory::{Memory, MemoryStrategy, MemoryEntry, Bookmark, MemoryConfig, HistoricalSynthesis};

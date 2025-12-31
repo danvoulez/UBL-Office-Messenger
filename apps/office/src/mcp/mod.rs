@@ -28,6 +28,7 @@
 mod client;
 mod config;
 mod native_server;
+mod prompts;
 mod protocol;
 mod registry;
 mod tool_executor;
@@ -46,6 +47,9 @@ pub use native_server::{NativeTool, OfficeMcpServer, ToolHandler};
 
 // Unified interface (the one LLM uses)
 pub use unified_registry::{UnifiedTool, UnifiedToolRegistry};
+
+// Prompt generation for LLM orientation
+pub use prompts::{generate_mcp_orientation, generate_minimal_orientation, mcp_ecosystem_guide};
 
 // Tool execution
 pub use tool_executor::{

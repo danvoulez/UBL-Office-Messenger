@@ -4,9 +4,21 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::frame::{ContextFrame, Obligation, ObligationStatus};
 use crate::session::SessionType;
+
+/// Tool information for narrative injection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInfo {
+    /// Full name including server prefix (e.g., "office:ubl_query")
+    pub name: String,
+    /// Human-readable description
+    pub description: String,
+    /// Parameter schema
+    pub parameters: Option<Value>,
+}
 
 /// Configuration for narrative generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +31,10 @@ pub struct NarrativeConfig {
     pub include_affordance_details: bool,
     /// Language for narrative
     pub language: String,
+    /// Include MCP tool orientation
+    pub include_tool_orientation: bool,
+    /// Show detailed tool parameters
+    pub show_tool_parameters: bool,
 }
 
 impl Default for NarrativeConfig {
@@ -28,6 +44,8 @@ impl Default for NarrativeConfig {
             max_verbatim_events: 10,
             include_affordance_details: true,
             language: "en".to_string(),
+            include_tool_orientation: true,
+            show_tool_parameters: false,
         }
     }
 }
@@ -35,12 +53,28 @@ impl Default for NarrativeConfig {
 /// Narrator - Generates situated narratives from context frames
 pub struct Narrator {
     config: NarrativeConfig,
+    /// Available MCP tools (injected when generating)
+    tools: Vec<ToolInfo>,
 }
 
 impl Narrator {
     /// Create a new narrator
     pub fn new(config: NarrativeConfig) -> Self {
-        Self { config }
+        Self { 
+            config,
+            tools: Vec::new(),
+        }
+    }
+
+    /// Add tools to include in narrative
+    pub fn with_tools(mut self, tools: Vec<ToolInfo>) -> Self {
+        self.tools = tools;
+        self
+    }
+
+    /// Set tools (for reuse)
+    pub fn set_tools(&mut self, tools: Vec<ToolInfo>) {
+        self.tools = tools;
     }
 
     /// Generate narrative from context frame
@@ -83,19 +117,25 @@ impl Narrator {
             narrative.push_str("\n\n");
         }
 
-        // 8. Previous handover section
+        // 8. Tool System section (MCP tools)
+        if self.config.include_tool_orientation && !self.tools.is_empty() {
+            narrative.push_str(&self.generate_tools_section());
+            narrative.push_str("\n\n");
+        }
+
+        // 9. Previous handover section
         if let Some(handover) = &frame.previous_handover {
             narrative.push_str(&self.generate_handover_section(handover));
             narrative.push_str("\n\n");
         }
 
-        // 9. Governance notes section
+        // 10. Governance notes section
         if !frame.governance_notes.is_empty() {
             narrative.push_str(&self.generate_governance_section(frame));
             narrative.push_str("\n\n");
         }
 
-        // 10. Constitution section (always last)
+        // 11. Constitution section (always last)
         narrative.push_str(&self.generate_constitution_section(frame));
 
         narrative
@@ -276,6 +316,89 @@ impl Narrator {
         section
     }
 
+    fn generate_tools_section(&self) -> String {
+        let mut section = String::from("# TOOL SYSTEM (MCP)\n\n");
+
+        section.push_str("You have access to external tools via the Model Context Protocol.\n");
+        section.push_str("All tools use the same interface - native and external are unified.\n\n");
+
+        section.push_str("## How to Use Tools\n\n");
+        section.push_str("When you need to perform an action, respond with a JSON block:\n\n");
+        section.push_str("```json\n");
+        section.push_str("{\n");
+        section.push_str("  \"tool_calls\": [\n");
+        section.push_str("    {\n");
+        section.push_str("      \"name\": \"server:tool_name\",\n");
+        section.push_str("      \"arguments\": { \"param1\": \"value1\" }\n");
+        section.push_str("    }\n");
+        section.push_str("  ]\n");
+        section.push_str("}\n");
+        section.push_str("```\n\n");
+
+        // Group tools by server
+        let mut by_server: std::collections::HashMap<&str, Vec<&ToolInfo>> = std::collections::HashMap::new();
+        for tool in &self.tools {
+            let server = tool.name.split(':').next().unwrap_or("unknown");
+            by_server.entry(server).or_default().push(tool);
+        }
+
+        section.push_str("## Available Tools\n\n");
+
+        // Native tools first (office:*)
+        if let Some(native_tools) = by_server.remove("office") {
+            section.push_str("### Native Tools (office:*)\n\n");
+            section.push_str("*Always available, fastest execution*\n\n");
+            for tool in native_tools {
+                self.append_tool_info(&mut section, tool);
+            }
+            section.push('\n');
+        }
+
+        // External tools
+        for (server, tools) in by_server {
+            section.push_str(&format!("### {} Tools\n\n", server));
+            for tool in tools {
+                self.append_tool_info(&mut section, tool);
+            }
+            section.push('\n');
+        }
+
+        section.push_str("## Best Practices\n\n");
+        section.push_str("1. **Prefer native tools** (`office:*`) for Office-specific operations\n");
+        section.push_str("2. **Check before writing** - use `office:permit_check` for risky operations\n");
+        section.push_str("3. **Simulate first** - use `office:simulate` for irreversible actions\n");
+        section.push_str("4. **Store learnings** - use `office:memory_store` for important discoveries\n");
+        section.push_str("5. **Escalate when uncertain** - use `office:escalate` if unsure\n");
+
+        section
+    }
+
+    fn append_tool_info(&self, section: &mut String, tool: &ToolInfo) {
+        section.push_str(&format!("- **{}**: {}\n", tool.name, tool.description));
+        
+        if self.config.show_tool_parameters {
+            if let Some(params) = &tool.parameters {
+                if let Some(props) = params.get("properties").and_then(|p| p.as_object()) {
+                    let required: Vec<&str> = params.get("required")
+                        .and_then(|r| r.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                        .unwrap_or_default();
+                    
+                    for (key, value) in props {
+                        let type_str = value.get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("any");
+                        let desc = value.get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("");
+                        let req = if required.contains(&key.as_str()) { " (required)" } else { "" };
+                        section.push_str(&format!("    - `{}`{}: {} - {}\n", key, req, type_str, desc));
+                    }
+                }
+            }
+        }
+    }
+
     fn generate_handover_section(&self, handover: &str) -> String {
         let mut section = String::from("# PREVIOUS INSTANCE HANDOVER\n\n");
         section.push_str("The previous instance of you left this note:\n\n");
@@ -362,5 +485,61 @@ mod tests {
         assert!(narrative.contains("entity_test"));
         assert!(narrative.contains("autonomous work session"));
         assert!(narrative.contains("Previous work went well"));
+    }
+
+    #[test]
+    fn test_narrative_with_tools() {
+        use serde_json::json;
+        
+        let frame = ContextFrame::new(
+            "entity_test".to_string(),
+            "Aria".to_string(),
+            SessionType::Work,
+            100,
+            Memory::default(),
+            vec![],
+            vec![],
+            Constitution::default(),
+            None,
+            vec![],
+            None,
+            5000,
+        );
+
+        let tools = vec![
+            ToolInfo {
+                name: "office:ubl_query".to_string(),
+                description: "Query the UBL ledger".to_string(),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "The query" }
+                    },
+                    "required": ["query"]
+                })),
+            },
+            ToolInfo {
+                name: "office:memory_recall".to_string(),
+                description: "Search semantic memory".to_string(),
+                parameters: None,
+            },
+            ToolInfo {
+                name: "filesystem:read_file".to_string(),
+                description: "Read file contents".to_string(),
+                parameters: None,
+            },
+        ];
+
+        let narrator = Narrator::default().with_tools(tools);
+        let narrative = narrator.generate(&frame);
+
+        // Should contain tool system section
+        assert!(narrative.contains("TOOL SYSTEM"));
+        assert!(narrative.contains("office:ubl_query"));
+        assert!(narrative.contains("office:memory_recall"));
+        assert!(narrative.contains("filesystem:read_file"));
+        assert!(narrative.contains("Native Tools"));
+        assert!(narrative.contains("Best Practices"));
+        assert!(narrative.contains("tool_calls"));
     }
 }

@@ -4,6 +4,79 @@ O Office implementa MCP de forma **unificada**: tools nativas e externas são ex
 
 **O LLM só vê MCP. Não sabe se é nativo ou externo.**
 
+## Como o Prompt é Injetado
+
+O `Narrator` gera uma narrativa estruturada que é passada como **system prompt** do LLM.
+A seção de tools MCP é injetada automaticamente quando tools estão disponíveis:
+
+```
+# IDENTITY
+You are **Aria**, an LLM Entity...
+
+# CURRENT SITUATION
+You are in a work session...
+
+# RECENT MEMORY
+Last events...
+
+# AVAILABLE CAPABILITIES
+(affordances from UBL)
+
+# TOOL SYSTEM (MCP)  ← Nova seção injetada aqui
+You have access to external tools via Model Context Protocol...
+
+## How to Use Tools
+```json
+{
+  "tool_calls": [{ "name": "server:tool", "arguments": {} }]
+}
+```
+
+## Available Tools
+### Native Tools (office:*)
+- office:ubl_query: Query the UBL ledger
+- office:memory_recall: Search semantic memory
+...
+
+### filesystem Tools
+- filesystem:read_file: Read file contents
+...
+
+## Best Practices
+1. Prefer native tools (office:*) for Office-specific operations
+2. Check before writing - use office:permit_check for risky operations
+...
+
+# PREVIOUS INSTANCE HANDOVER
+...
+
+# CONSTITUTION
+...
+```
+
+### Configuração do Narrator
+
+```rust
+use office::context::{Narrator, NarrativeConfig, ToolInfo};
+
+let config = NarrativeConfig {
+    include_tool_orientation: true,  // Incluir seção de tools
+    show_tool_parameters: false,     // Detalhes dos parâmetros
+    ..Default::default()
+};
+
+let tools = vec![
+    ToolInfo {
+        name: "office:ubl_query".to_string(),
+        description: "Query the UBL ledger".to_string(),
+        parameters: None,
+    },
+];
+
+let narrator = Narrator::new(config).with_tools(tools);
+let narrative = narrator.generate(&context_frame);
+```
+
 ## Arquitetura Unificada
 
 ```
@@ -312,6 +385,56 @@ for line in sys.stdin:
     }
     print(json.dumps(response), flush=True)
 ```
+
+## MCP Ecosystem Guide
+
+O Office inclui orientação sobre o ecossistema MCP que pode ser injetada no prompt do LLM.
+Isso ajuda LLMs a descobrir e usar tools de forma segura.
+
+### Obtendo o Guia
+
+```rust
+use office::mcp::mcp_ecosystem_guide;
+
+let guide = mcp_ecosystem_guide();
+// Adicionar ao prompt quando o LLM perguntar sobre MCPs disponíveis
+```
+
+### Servidores Oficiais (Alta Confiança)
+
+| Server | Propósito | Trust Level |
+|--------|-----------|-------------|
+| `@modelcontextprotocol/server-filesystem` | Operações de arquivo | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-github` | GitHub API | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-brave-search` | Busca web | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-sqlite` | Queries de banco | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-puppeteer` | Automação de browser | ⭐⭐ Médio |
+| `@modelcontextprotocol/server-memory` | Grafos de conhecimento | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-postgres` | PostgreSQL | ⭐⭐⭐ Alto |
+| `@modelcontextprotocol/server-slack` | Mensagens Slack | ⭐⭐⭐ Alto |
+
+### Como Encontrar MCPs Seguros
+
+1. **Registry Oficial**: https://github.com/modelcontextprotocol/servers
+2. **GitHub Search**: `mcp-server` ou `modelcontextprotocol`
+3. **npm Search**: prefixo `@modelcontextprotocol/` para oficiais
+
+### Checklist de Segurança
+
+- ✅ Open source com código legível
+- ✅ Manutenção ativa (commits nos últimos 3 meses)
+- ✅ Documentação clara
+- ✅ Sem chamadas de rede suspeitas
+- ✅ Permissões mínimas solicitadas
+- ⚠️ Cuidado com servers pedindo acesso amplo ao filesystem
+- ⚠️ Evite servers que pedem credenciais desnecessárias
+
+### Solicitando Novos MCPs
+
+Se o LLM precisa de uma capability não disponível:
+1. Verificar se já existe (pesquisar primeiro!)
+2. Pedir ao guardian para instalar um server confiável
+3. Usar `office:escalate` para solicitar novas capabilities
 
 ## Roadmap
 
