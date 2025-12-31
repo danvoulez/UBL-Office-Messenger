@@ -48,7 +48,8 @@ pub struct GatewayState {
 pub fn routes(pool: PgPool, office_url: String) -> Router {
     let ledger = PgLedger::new(pool.clone());
     let office_client = Arc::new(OfficeClient::new(office_url));
-    let idempotency = Arc::new(IdempotencyStore::new());
+    // Fix #4: Persistent idempotency backed by Postgres
+    let idempotency = Arc::new(IdempotencyStore::new(pool.clone()));
     let projections = Arc::new(GatewayProjections::new(pool.clone()));
     
     let state = GatewayState {
@@ -151,7 +152,8 @@ async fn post_message(
         )
     });
     
-    if let Some(record) = state.idempotency.check(&idempotency_key) {
+    // Fix #4: Async idempotency check (Postgres-backed)
+    if let Some(record) = state.idempotency.check(&idempotency_key).await {
         if record.status == "completed" {
             // Return cached response
             if let Some(response) = record.response_body {
@@ -251,7 +253,8 @@ async fn post_message(
                 created_event_ids: office_resp.event_ids.clone(),
                 created_at: OffsetDateTime::now_utc(),
             };
-            state.idempotency.store(idempotency_key, record);
+            // Fix #4: Async store (ignore errors - idempotency is best-effort)
+            let _ = state.idempotency.store(idempotency_key, tenant_id, record).await;
             
             Ok(Json(response))
         }
@@ -286,7 +289,8 @@ async fn job_action(
         )
     });
     
-    if let Some(record) = state.idempotency.check(&idempotency_key) {
+    // Fix #4: Async idempotency check (Postgres-backed)
+    if let Some(record) = state.idempotency.check(&idempotency_key).await {
         if record.status == "completed" {
             if let Some(response) = record.response_body {
                 return Ok(Json(serde_json::from_value(response)
@@ -319,7 +323,8 @@ async fn job_action(
                 created_event_ids: office_resp.event_ids.clone(),
                 created_at: time::OffsetDateTime::now_utc(),
             };
-            state.idempotency.store(idempotency_key, record);
+            // Fix #4: Async store (ignore errors - idempotency is best-effort)
+            let _ = state.idempotency.store(idempotency_key, tenant_id, record).await;
             
             Ok(Json(JobActionResponse {
                 success: office_resp.success,

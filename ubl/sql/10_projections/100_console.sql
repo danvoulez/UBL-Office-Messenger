@@ -6,6 +6,28 @@
 -- ADR-UBL-Console-001 v1.1 — multi-tenant + envelopes
 
 -- ============================================================================
+-- GATEWAY IDEMPOTENCY (Fix #4)
+-- ============================================================================
+-- Persistent idempotency store for Gateway operations.
+-- Replaces in-memory HashMap to survive restarts.
+-- TTL-based cleanup via created_at.
+
+CREATE TABLE IF NOT EXISTS gateway_idempotency (
+  idem_key        TEXT PRIMARY KEY,
+  tenant_id       TEXT NOT NULL,
+  status          TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed')),
+  response_body   JSONB,
+  event_ids       TEXT[] NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for cleanup job (remove entries older than 24h)
+CREATE INDEX IF NOT EXISTS idx_gateway_idem_created ON gateway_idempotency(created_at);
+CREATE INDEX IF NOT EXISTS idx_gateway_idem_tenant ON gateway_idempotency(tenant_id);
+
+COMMENT ON TABLE gateway_idempotency IS 'Fix #4: Persistent idempotency store for Gateway (survives restarts)';
+
+-- ============================================================================
 -- PERMITS (ADR-UBL-Console-001 v1.1)
 -- ============================================================================
 -- Stores issued permits for audit trail
