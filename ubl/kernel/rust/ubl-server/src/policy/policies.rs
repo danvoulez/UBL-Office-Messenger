@@ -133,22 +133,45 @@ impl PolicyEngine {
         Ok(())
     }
 
-    /// Check for raw PII
+    /// Check for raw PII (Fix #7: Fail-Closed)
+    /// 
+    /// Scans atom data for raw PII and REJECTS the commit if found.
+    /// This is fail-closed: detection failure = rejection.
     pub fn check_no_raw_pii(&self, atom: &Value) -> PolicyResult<()> {
-        // Simple check - look for common PII patterns
+        // Serialize atom to string for pattern matching
         let atom_str = serde_json::to_string(atom).unwrap_or_default().to_lowercase();
         
+        // PII patterns to detect (fail-closed: any match = rejection)
         let pii_patterns = [
+            // US SSN: 123-45-6789
             (r"\b\d{3}-\d{2}-\d{4}\b", "ssn"),
+            // Credit card: 1234 5678 9012 3456
             (r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", "credit_card"),
+            // US phone: 555-123-4567
             (r"\b\d{3}-\d{3}-\d{4}\b", "phone"),
+            // Email: user@example.com (Fix #7: MUST detect emails)
+            (r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", "email"),
+            // Brazilian CPF: 123.456.789-00
+            (r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", "cpf"),
         ];
 
         for (pattern, field_type) in pii_patterns.iter() {
-            if regex::Regex::new(pattern).unwrap().is_match(&atom_str) {
-                return Err(PolicyError::RawPiiDetected {
-                    field: field_type.to_string(),
-                });
+            match regex::Regex::new(pattern) {
+                Ok(re) => {
+                    if re.is_match(&atom_str) {
+                        warn!("🚫 PII DETECTED in atom: type={}", field_type);
+                        return Err(PolicyError::RawPiiDetected {
+                            field: field_type.to_string(),
+                        });
+                    }
+                }
+                Err(e) => {
+                    // Fail-closed: regex compilation failure = rejection
+                    error!("❌ PII regex failed to compile: {} - blocking commit", e);
+                    return Err(PolicyError::RawPiiDetected {
+                        field: "unknown (detection failure)".to_string(),
+                    });
+                }
             }
         }
 
