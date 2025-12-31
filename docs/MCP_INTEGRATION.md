@@ -1,47 +1,60 @@
 # MCP (Model Context Protocol) Integration
 
-O Office agora suporta o **Model Context Protocol (MCP)** para conectar com ferramentas externas dinamicamente.
+O Office implementa MCP de forma **unificada**: tools nativas e externas são expostas com a mesma interface.
 
-## O que é MCP?
+**O LLM só vê MCP. Não sabe se é nativo ou externo.**
 
-MCP é um protocolo aberto que permite que LLMs se comuniquem com "servers" que expõem:
-- **Tools**: Funções executáveis (read_file, search, git_commit, etc.)
-- **Resources**: Dados acessíveis (arquivos, URLs, banco de dados)
-- **Prompts**: Templates reutilizáveis
-
-O protocolo usa JSON-RPC 2.0 sobre stdio.
-
-## Arquitetura
+## Arquitetura Unificada
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                           OFFICE                                 │
-│                                                                  │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐    │
-│  │   LLM Job    │────▶│ ToolExecutor │────▶│ McpRegistry  │    │
-│  │   Executor   │     │              │     │              │    │
-│  └──────────────┘     └──────────────┘     └──────┬───────┘    │
-│                                                    │            │
-└────────────────────────────────────────────────────┼────────────┘
-                                                     │
-                        ┌────────────────────────────┼────────────┐
-                        │                            ▼            │
-                        │  ┌───────────┐  ┌───────────┐  ┌─────┐ │
-                        │  │ McpClient │  │ McpClient │  │ ... │ │
-                        │  └─────┬─────┘  └─────┬─────┘  └──┬──┘ │
-                        │        │               │           │    │
-                        │  ┌─────▼─────┐  ┌─────▼─────┐  ┌──▼──┐ │
-                        │  │filesystem │  │  github   │  │ ... │ │
-                        │  │  server   │  │  server   │  │     │ │
-                        │  └───────────┘  └───────────┘  └─────┘ │
-                        │                                         │
-                        │        MCP Servers (stdio)              │
-                        └─────────────────────────────────────────┘
+                          LLM
+                           │
+                           ▼
+                ┌────────────────────┐
+                │ UnifiedToolRegistry│
+                └─────────┬──────────┘
+                          │
+        ┌─────────────────┼─────────────────┐
+        ▼                 ▼                 ▼
+  ┌───────────┐    ┌───────────┐    ┌───────────┐
+  │  office:  │    │filesystem:│    │  github:  │
+  │ (native)  │    │   (mcp)   │    │   (mcp)   │
+  └───────────┘    └───────────┘    └───────────┘
 ```
 
-## Configuração
+## Tools Nativas (office:*)
 
-### Via Variáveis de Ambiente
+O Office expõe 14+ tools nativas via MCP:
+
+### UBL Tools
+- `office:ubl_query` - Query the ledger
+- `office:ubl_commit` - Commit atoms to ledger
+
+### Entity Tools
+- `office:entity_get` - Get entity info
+- `office:entity_handover` - Read/write handover notes
+
+### Job Tools
+- `office:job_create` - Create new jobs
+- `office:job_status` - Check job status
+
+### Memory Tools
+- `office:memory_recall` - Semantic memory search
+- `office:memory_store` - Store memories
+
+### Governance Tools
+- `office:sanity_check` - Validate claims
+- `office:permit_check` - Check UBL policy permissions
+- `office:simulate` - Simulate before executing
+
+### Communication Tools
+- `office:message_send` - Send messages
+- `office:message_history` - Get conversation history
+- `office:escalate` - Escalate to guardian
+
+## Tools Externas (MCP Servers)
+
+Conecta a servidores MCP via stdio:
 
 ```bash
 # Habilitar MCP

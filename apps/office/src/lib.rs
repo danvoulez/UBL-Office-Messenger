@@ -113,7 +113,7 @@ pub use llm::LlmProvider;
 pub use job_executor::{JobExecutor, Job, JobId, JobResult, ConversationContext};
 pub use task::{Task, TaskId, TaskStatus, TaskExecutor, TaskResult};
 pub use middleware::{PermitMiddleware, PermitRequest, PermitResponse, ConstitutionEnforcer};
-pub use mcp::{McpRegistry, McpClient, McpConfig, ToolExecutor};
+pub use mcp::{McpRegistry, McpClient, McpConfig, ToolExecutor, OfficeMcpServer, UnifiedToolRegistry};
 
 use thiserror::Error;
 
