@@ -251,7 +251,8 @@ async fn post_message(
             
             let record = crate::messenger_gateway::idempotency::IdempotencyRecord {
                 status: "completed".to_string(),
-                response_body: Some(serde_json::to_value(&response).unwrap()),
+                // Fix #15: Handle JSON serialization errors gracefully
+                response_body: serde_json::to_value(&response).ok(),
                 created_event_ids: office_resp.event_ids.clone(),
                 created_at: OffsetDateTime::now_utc(),
             };
@@ -354,10 +355,11 @@ async fn job_action(
             // Store idempotency record
             let record = crate::messenger_gateway::idempotency::IdempotencyRecord {
                 status: "completed".to_string(),
-                response_body: Some(serde_json::to_value(JobActionResponse {
+                // Fix #15: Handle JSON serialization errors gracefully
+                response_body: serde_json::to_value(JobActionResponse {
                     success: office_resp.success,
                     event_ids: office_resp.event_ids.clone(),
-                }).unwrap()),
+                }).ok(),
                 created_event_ids: office_resp.event_ids.clone(),
                 created_at: time::OffsetDateTime::now_utc(),
             };

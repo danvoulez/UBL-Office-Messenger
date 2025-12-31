@@ -126,8 +126,8 @@ impl PolicyEngine {
             });
         }
 
-        // TODO: Verify button_id exists in card and action_type matches
-        // For now, just check card exists
+        // FUTURE: Verify button_id exists in card and action_type matches
+        // Currently just validates card exists - button validation requires card schema parsing
 
         info!("✅ Card provenance valid: card={} button={}", card_id, button_id);
         Ok(())

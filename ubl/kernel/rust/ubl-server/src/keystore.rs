@@ -47,7 +47,8 @@ pub fn init() {
         }
     }
     
-    let mut cache = KEY_CACHE.write().unwrap();
+    // Fix #15: Use expect for clearer panic on lock poisoning
+    let mut cache = KEY_CACHE.write().expect("KeyStore lock poisoned");
     *cache = Some(HashMap::new());
     
     info!("KeyStore initialized at {:?}", dir);
@@ -63,7 +64,7 @@ pub fn init() {
 pub fn load_or_create(key_id: &str) -> SigningKey {
     // Check cache first
     {
-        let cache = KEY_CACHE.read().unwrap();
+        let cache = KEY_CACHE.read().expect("KeyStore lock poisoned");
         if let Some(ref map) = *cache {
             if let Some(key) = map.get(key_id) {
                 return key.clone();
@@ -76,7 +77,8 @@ pub fn load_or_create(key_id: &str) -> SigningKey {
     if let Ok(hex) = std::env::var(&env_key) {
         if let Ok(bytes) = hex::decode(hex.trim()) {
             if bytes.len() == 32 {
-                let key_bytes: [u8; 32] = bytes.try_into().unwrap();
+                // Fix #15: Safe because we just checked len == 32
+                let key_bytes: [u8; 32] = bytes.try_into().expect("length already verified");
                 let key = SigningKey::from_bytes(&key_bytes);
                 cache_key(key_id, key.clone());
                 info!("Loaded key '{}' from environment", key_id);
@@ -93,7 +95,8 @@ pub fn load_or_create(key_id: &str) -> SigningKey {
             Ok(hex) => {
                 if let Ok(bytes) = hex::decode(hex.trim()) {
                     if bytes.len() == 32 {
-                        let key_bytes: [u8; 32] = bytes.try_into().unwrap();
+                        // Fix #15: Safe because we just checked len == 32
+                        let key_bytes: [u8; 32] = bytes.try_into().expect("length already verified");
                         let key = SigningKey::from_bytes(&key_bytes);
                         cache_key(key_id, key.clone());
                         info!("Loaded key '{}' from {:?}", key_id, key_path);
