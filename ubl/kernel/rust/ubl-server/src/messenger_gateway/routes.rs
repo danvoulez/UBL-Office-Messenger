@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use time::OffsetDateTime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::db::PgLedger;
@@ -299,6 +299,20 @@ async fn job_action(
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?));
             }
         }
+    }
+    
+    // Fix #6: Validate job exists and user has access via projection
+    let job = state.projections.get_job(&job_id, tenant_id).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to fetch job: {}", e)))?
+        .ok_or((StatusCode::NOT_FOUND, format!("Job {} not found", job_id)))?;
+    
+    // Check user has access (is owner, participant, or has approval rights)
+    let has_access = job.owner_entity_id.as_deref() == Some(&user.sid)
+        || job.waiting_on.as_ref().map_or(false, |w| w.contains(&user.sid));
+    
+    if !has_access {
+        warn!("🚫 User {} attempted action on job {} without access", user.sid, job_id);
+        return Err((StatusCode::FORBIDDEN, "You don't have access to this job".to_string()));
     }
     
     // 3. Call Office to handle job action
