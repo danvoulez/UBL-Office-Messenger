@@ -98,3 +98,4 @@ CREATE INDEX IF NOT EXISTS idx_office_audit_created ON office_audit_log(created_
 
 COMMENT ON TABLE office_audit_log IS 'Audit trail of LLM actions, decisions, and policy violations';
 
+

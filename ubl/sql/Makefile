@@ -64,3 +64,4 @@ db.check:
 	done < "$(MIGRATION_ORDER)"
 	@echo "✅ Syntax check complete"
 
+

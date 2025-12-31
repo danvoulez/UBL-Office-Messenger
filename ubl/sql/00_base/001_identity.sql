@@ -164,3 +164,4 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION cleanup_expired_sessions IS 'Clean up expired sessions (run via cron or background task)';
 
+

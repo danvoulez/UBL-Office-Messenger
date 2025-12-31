@@ -99,3 +99,4 @@ COMMENT ON TABLE idempotency_key IS 'Idempotency keys for safe retries';
 
 -- TODO: Add metrics/logs tables as needed
 
+

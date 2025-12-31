@@ -12,3 +12,4 @@ CREATE TRIGGER trg_tail_notify
 AFTER INSERT ON ledger_entry
 FOR EACH ROW EXECUTE FUNCTION ubl_tail_notify();
 
+

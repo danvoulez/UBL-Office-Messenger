@@ -72,6 +72,7 @@ pub mod types;
 pub mod asc;
 pub mod routes;
 pub mod http_unix;
+pub mod mcp;
 
 // Builder function for tests (Prompt 2: Office integration tests)
 use axum::Router;
@@ -112,6 +113,7 @@ pub use llm::LlmProvider;
 pub use job_executor::{JobExecutor, Job, JobId, JobResult, ConversationContext};
 pub use task::{Task, TaskId, TaskStatus, TaskExecutor, TaskResult};
 pub use middleware::{PermitMiddleware, PermitRequest, PermitResponse, ConstitutionEnforcer};
+pub use mcp::{McpRegistry, McpClient, McpConfig, ToolExecutor};
 
 use thiserror::Error;
 
@@ -159,6 +161,9 @@ pub enum OfficeError {
 
     #[error("Constitution violation: {0}")]
     ConstitutionViolation(String),
+
+    #[error("MCP error: {0}")]
+    McpError(String),
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
