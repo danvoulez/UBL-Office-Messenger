@@ -282,13 +282,12 @@ async fn create_session(
         session = session.with_budget(budget);
     }
 
-    // Get the latest handover from local memory
-    let latest_handover = state.handovers.get(&entity_id)
-        .and_then(|h| h.last())
-        .map(|ho| ho.content.clone());
+    // Fix #9: UBL is the authoritative source for handovers
+    // We no longer use local memory - the ContextFrameBuilder will fetch from UBL
+    // This ensures the "Dignity Trajectory" is based on the immutable ledger
 
-    // Build context frame
-    let mut frame = ContextFrameBuilder::new(
+    // Build context frame (fetches handover from UBL via get_last_handover)
+    let frame = ContextFrameBuilder::new(
         entity.clone(),
         req.session_type,
         state.ubl_client.clone(),
@@ -296,14 +295,8 @@ async fn create_session(
     .build()
     .await?;
 
-    // Inject local handover if UBL didn't provide one
-    if frame.previous_handover.is_none() {
-        if let Some(handover_content) = latest_handover {
-            frame.previous_handover = Some(handover_content);
-            // Recalculate hash since we modified the frame
-            frame.frame_hash = frame.calculate_hash();
-        }
-    }
+    // Note: frame.previous_handover is now always from UBL
+    // Local handovers are deprecated - they should be committed to UBL at session end
 
     // Generate narrative
     let narrator = Narrator::default();
@@ -404,11 +397,11 @@ async fn create_handover(
     Path((entity_id, session_id)): Path<(String, String)>,
     Json(req): Json<CreateHandoverRequest>,
 ) -> std::result::Result<impl IntoResponse, ApiError> {
-    let mut state = state.write().await;
+    let state_read = state.read().await;
 
     // Verify session exists and belongs to entity
     let instance_id = {
-        let session = state.sessions.get(&session_id)
+        let session = state_read.sessions.get(&session_id)
             .ok_or_else(|| ApiError::NotFound(format!("Session not found: {}", session_id)))?;
 
         if session.entity_id != entity_id {
@@ -422,30 +415,43 @@ async fn create_handover(
     let mut handover = Handover::new(
         entity_id.clone(),
         session_id.clone(),
-        instance_id,
+        instance_id.clone(),
         req.content.clone(),
     );
 
-    if let Some(summary) = req.summary {
-        handover.summary = Some(summary);
+    if let Some(ref summary) = req.summary {
+        handover.summary = Some(summary.clone());
     }
 
     let handover_id = handover.id.clone();
     let created_at = handover.created_at.to_rfc3339();
 
-    // Store handover
-    state.handovers.entry(entity_id.clone())
+    // Fix #9: Commit handover to UBL ledger instead of local memory
+    // Handover is committed as part of session.completed event
+    // Store temporarily for inclusion in session completion
+    let handover_json = serde_json::json!({
+        "handover_id": handover_id.clone(),
+        "content": req.content,
+        "summary": req.summary,
+        "instance_id": instance_id,
+        "created_at": created_at,
+    });
+    
+    // Store in local memory temporarily (will be committed when session ends)
+    drop(state_read);
+    let mut state_write = state.write().await;
+    state_write.handovers.entry(entity_id.clone())
         .or_insert_with(Vec::new)
         .push(handover);
 
-    info!("Created handover: {} for session: {}", handover_id, session_id);
+    info!("Created handover: {} for session: {} (pending UBL commit on session end)", handover_id, session_id);
 
     Ok((StatusCode::CREATED, Json(HandoverResponse {
         id: handover_id,
         entity_id,
         session_id,
         content: req.content,
-        summary: None,
+        summary: req.summary,
         created_at,
     })))
 }
@@ -456,16 +462,18 @@ async fn list_handovers(
 ) -> std::result::Result<impl IntoResponse, ApiError> {
     let state = state.read().await;
 
-    let handovers = state.handovers.get(&entity_id)
-        .map(|h| h.iter().map(|ho| HandoverResponse {
-            id: ho.id.clone(),
-            entity_id: ho.entity_id.clone(),
-            session_id: ho.session_id.clone(),
-            content: ho.content.clone(),
-            summary: ho.summary.clone(),
-            created_at: ho.created_at.to_rfc3339(),
-        }).collect::<Vec<_>>())
+    // Fix #9: Fetch handovers from UBL ledger (authoritative source)
+    let ubl_handovers = state.ubl_client.get_handovers(&entity_id, 50).await
         .unwrap_or_default();
+    
+    let handovers: Vec<HandoverResponse> = ubl_handovers.iter().map(|ho| HandoverResponse {
+        id: ho.id.clone(),
+        entity_id: ho.entity_id.clone(),
+        session_id: ho.session_id.clone(),
+        content: ho.content.clone(),
+        summary: ho.summary.clone(),
+        created_at: ho.created_at.to_rfc3339(),
+    }).collect();
 
     Ok(Json(handovers))
 }
@@ -476,19 +484,18 @@ async fn get_latest_handover(
 ) -> std::result::Result<impl IntoResponse, ApiError> {
     let state = state.read().await;
 
-    let handover = state.handovers.get(&entity_id)
-        .and_then(|h| h.last())
-        .map(|ho| HandoverResponse {
-            id: ho.id.clone(),
-            entity_id: ho.entity_id.clone(),
-            session_id: ho.session_id.clone(),
-            content: ho.content.clone(),
-            summary: ho.summary.clone(),
-            created_at: ho.created_at.to_rfc3339(),
-        });
+    // Fix #9: Fetch latest handover from UBL ledger (authoritative source)
+    let handover_content = state.ubl_client.get_last_handover(&entity_id).await
+        .map_err(|e| ApiError::InternalError(format!("Failed to fetch handover: {}", e)))?;
 
-    match handover {
-        Some(h) => Ok(Json(h)),
+    match handover_content {
+        Some(content) => Ok(Json(serde_json::json!({
+            "ok": true,
+            "data": {
+                "entity_id": entity_id,
+                "content": content,
+            }
+        }))),
         None => Err(ApiError::NotFound("No handovers found".to_string())),
     }
 }
