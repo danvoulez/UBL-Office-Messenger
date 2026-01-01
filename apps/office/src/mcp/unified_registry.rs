@@ -50,6 +50,14 @@ impl UnifiedToolRegistry {
             external: Arc::new(RwLock::new(McpRegistry::new())),
         }
     }
+    
+    /// Create with UBL context for real operations
+    pub fn with_context(ubl_client: Arc<crate::ubl_client::UblClient>, container_id: &str) -> Self {
+        Self {
+            native: Arc::new(OfficeMcpServer::with_context(ubl_client, container_id)),
+            external: Arc::new(RwLock::new(McpRegistry::new())),
+        }
+    }
 
     /// Get the native server (for registration)
     pub fn native(&self) -> &Arc<OfficeMcpServer> {

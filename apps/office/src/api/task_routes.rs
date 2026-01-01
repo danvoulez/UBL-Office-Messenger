@@ -179,7 +179,18 @@ async fn create_task(
         tasks.insert(task_id.clone(), task.clone());
     }
 
-    // TODO: Publish task.created event to UBL
+    // Publish task.created event to UBL
+    let event = serde_json::json!({
+        "type": "task.created",
+        "task_id": task_id,
+        "title": task.title,
+        "created_by": task.created_by,
+        "assigned_to": task.assigned_to,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.created event: {}", e);
+    }
 
     info!("✅ Task created: {}", task_id);
 
@@ -248,7 +259,16 @@ async fn approve_task(
 
     task.approve(&req.approved_by);
 
-    // TODO: Publish task.approved event to UBL
+    // Publish task.approved event to UBL
+    let event = serde_json::json!({
+        "type": "task.approved",
+        "task_id": task_id,
+        "approved_by": req.approved_by,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.approved event: {}", e);
+    }
 
     info!("✅ Task approved: {}", task_id);
 
@@ -283,7 +303,17 @@ async fn reject_task(
 
     task.reject(&req.rejected_by, &req.reason);
 
-    // TODO: Publish task.rejected event to UBL
+    // Publish task.rejected event to UBL
+    let event = serde_json::json!({
+        "type": "task.rejected",
+        "task_id": task_id,
+        "rejected_by": req.rejected_by,
+        "reason": req.reason,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.rejected event: {}", e);
+    }
 
     Ok(Json(TaskActionResponse {
         success: true,
@@ -427,8 +457,17 @@ async fn accept_task(
 
     task.accept(&req.accepted_by);
 
-    // TODO: Publish task.accepted event to UBL
-    // TODO: Commit to git repository for versioning
+    // Publish task.accepted event to UBL
+    let event = serde_json::json!({
+        "type": "task.accepted",
+        "task_id": task_id,
+        "accepted_by": req.accepted_by,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.accepted event: {}", e);
+    }
+    // Note: Git versioning deferred to artifact system
 
     info!("✅ Task accepted and finalized: {}", task_id);
 
@@ -463,7 +502,17 @@ async fn dispute_task(
 
     task.dispute(&req.disputed_by, &req.reason);
 
-    // TODO: Publish task.disputed event to UBL
+    // Publish task.disputed event to UBL
+    let event = serde_json::json!({
+        "type": "task.disputed",
+        "task_id": task_id,
+        "disputed_by": req.disputed_by,
+        "reason": req.reason,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.disputed event: {}", e);
+    }
 
     Ok(Json(TaskActionResponse {
         success: true,
@@ -495,7 +544,15 @@ async fn cancel_task(
 
     task.cancel();
 
-    // TODO: Publish task.cancelled event to UBL
+    // Publish task.cancelled event to UBL
+    let event = serde_json::json!({
+        "type": "task.cancelled",
+        "task_id": task_id,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Err(e) = state.ubl_client.publish_event(&state.container_id, &event).await {
+        error!("Failed to publish task.cancelled event: {}", e);
+    }
 
     Ok(Json(TaskActionResponse {
         success: true,

@@ -43,7 +43,7 @@ pub use registry::{McpRegistry, McpServerConfig};
 pub use transport::StdioTransport;
 
 // Native Office MCP server
-pub use native_server::{NativeTool, OfficeMcpServer, ToolHandler};
+pub use native_server::{NativeTool, OfficeMcpServer, ToolContext, ToolHandler};
 
 // Unified interface (the one LLM uses)
 pub use unified_registry::{UnifiedTool, UnifiedToolRegistry};

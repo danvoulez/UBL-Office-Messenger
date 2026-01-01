@@ -299,8 +299,22 @@ impl EntityRepository {
         // Get current state
         let state = self.ubl_client.get_state(entity_id).await?;
 
-        // Build link commit
-        // Note: In production, we'd sign with the entity's actual key
+        // Build signable content (canonical form of link fields)
+        let signable = format!(
+            "{}:{}:{}:{}:{}:{}:{}",
+            1, // version
+            self.container_id,
+            state.sequence + 1,
+            state.last_hash,
+            atom_hash,
+            "observation",
+            0 // physics_delta
+        );
+        
+        // Sign with UblClient's Ed25519 key
+        let signature = self.ubl_client.sign(signable.as_bytes());
+
+        // Build link commit with real signature
         let link = LinkCommit {
             version: 1,
             container_id: self.container_id.clone(),
@@ -310,8 +324,8 @@ impl EntityRepository {
             intent_class: "observation".to_string(),
             physics_delta: 0,
             pact: None,
-            author_pubkey: "office".to_string(), // TODO: Use actual key
-            signature: "mock".to_string(), // TODO: Sign properly
+            author_pubkey: self.ubl_client.pubkey_hex().to_string(),
+            signature,
         };
 
         // Commit to ledger
