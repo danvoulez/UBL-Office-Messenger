@@ -60,14 +60,14 @@ export const OnboardingPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Call the new tenant API
+      // Call the tenant API - no demo fallback, real persistence only
       const response = await api.post<CreateTenantResponse>('/tenant', {
         name: tenantName
       });
       
       const { tenant, invite_code } = response;
       
-      // Save to localStorage
+      // Save to localStorage for quick access
       localStorage.setItem('ubl_tenant_id', tenant.tenant_id);
       localStorage.setItem('ubl_tenant_name', tenant.name);
       localStorage.setItem('ubl_tenant_role', 'owner');
@@ -78,20 +78,14 @@ export const OnboardingPage: React.FC = () => {
       toast.success(`${tenantName} created!`);
     } catch (err: any) {
       console.error('Create tenant error:', err);
-      // For demo mode, simulate creation
-      const tenantId = `tenant_${Date.now()}`;
-      const demoCode = Array.from({length: 8}, (_, i) => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        return (i === 4 ? '-' : '') + chars[Math.floor(Math.random() * chars.length)];
-      }).join('').slice(0, 9);
+      const errorMsg = err.message || err.response?.data?.error || 'Failed to create organization';
       
-      localStorage.setItem('ubl_tenant_id', tenantId);
-      localStorage.setItem('ubl_tenant_name', tenantName);
-      localStorage.setItem('ubl_tenant_role', 'owner');
-      localStorage.setItem('ubl_tenant_invite_code', demoCode);
-      
-      setCreatedInviteCode(demoCode);
-      toast.success(`${tenantName} created! (demo mode)`);
+      if (errorMsg.includes('already has a tenant')) {
+        toast.error('You already belong to an organization');
+        navigate('/');
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -109,9 +103,9 @@ export const OnboardingPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Call the new tenant join API
+      // Call the tenant join API - no demo fallback, real persistence only
       const response = await api.post<JoinTenantResponse>('/tenant/join', {
-        code: inviteCode.toUpperCase()
+        code: inviteCode.toUpperCase().trim()
       });
       
       const { tenant } = response;
@@ -124,7 +118,7 @@ export const OnboardingPage: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       console.error('Join tenant error:', err);
-      const errorMsg = err.response?.data?.error || 'Failed to join';
+      const errorMsg = err.message || err.response?.data?.error || 'Failed to join';
       
       if (errorMsg.includes('Invalid') || errorMsg.includes('expired')) {
         toast.error('Invalid or expired invite code');
@@ -132,13 +126,7 @@ export const OnboardingPage: React.FC = () => {
         toast.error('You already belong to an organization');
         navigate('/');
       } else {
-        // For demo mode
-        const tenantId = `tenant_${inviteCode.replace(/-/g, '').toLowerCase()}`;
-        localStorage.setItem('ubl_tenant_id', tenantId);
-        localStorage.setItem('ubl_tenant_name', `Team ${inviteCode.slice(0, 4)}`);
-        localStorage.setItem('ubl_tenant_role', 'member');
-        toast.success('Joined organization! (demo mode)');
-        navigate('/');
+        toast.error(errorMsg);
       }
     } finally {
       setIsLoading(false);

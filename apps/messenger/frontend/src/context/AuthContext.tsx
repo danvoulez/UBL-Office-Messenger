@@ -1,18 +1,16 @@
 /**
  * Auth Context Provider
  * Global authentication state management
+ * 
+ * Phase 4: Consolidated auth - now uses useAuth hook internally
+ * to avoid code duplication and ensure PRF support
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import {
-  startRegistration,
-  startAuthentication,
-  browserSupportsWebAuthn,
-} from '@simplewebauthn/browser';
+import React, { createContext, useContext } from 'react';
+import { useAuth } from '../hooks/useAuth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
-
-interface User {
+// Re-export User type for convenience
+export interface User {
   sid: string;
   username: string;
   displayName: string;
@@ -26,15 +24,22 @@ interface AuthContextType {
   isLoading: boolean;
   isDemoMode: boolean;
   supportsWebAuthn: boolean;
+  supportsPRF: boolean;
+  canSignClientSide: boolean;
   error: string | null;
   registerPasskey: (username: string, displayName: string) => Promise<{ sid: string }>;
   loginWithPasskey: (username: string) => Promise<{ sid: string }>;
   loginDemo: () => void;
   logout: () => void;
+  getPublicKeyForRegistration: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * Hook to use auth context
+ * Throws if used outside AuthProvider
+ */
 export const useAuthContext = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -43,194 +48,36 @@ export const useAuthContext = () => {
   return context;
 };
 
+/**
+ * Auth Provider Component
+ * Wraps the useAuth hook to provide global auth state
+ */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use the consolidated useAuth hook
+  const auth = useAuth();
   
-  const isDemoMode = localStorage.getItem('ubl_demo_mode') === 'true';
-  const supportsWebAuthn = browserSupportsWebAuthn();
+  // Derive isDemoMode from user kind
+  const isDemoMode = auth.user?.kind === 'demo';
 
-  // Check session on mount
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // Check demo mode
-        if (isDemoMode) {
-          setUser({
-            sid: 'demo:user',
-            username: 'Demo User',
-            displayName: 'Demo User',
-            kind: 'demo',
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        // Check session token
-        const sessionToken = localStorage.getItem('ubl_session_token');
-        if (!sessionToken) {
-          setIsLoading(false);
-          return;
-        }
-
-        // Validate with server
-        const res = await fetch(`${API_BASE}/id/whoami`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated) {
-            setUser({
-              sid: data.sid,
-              username: data.display_name,
-              displayName: data.display_name,
-              kind: data.kind,
-            });
-          } else {
-            localStorage.removeItem('ubl_session_token');
-          }
-        } else {
-          localStorage.removeItem('ubl_session_token');
-        }
-      } catch (err) {
-        console.error('Session check failed:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkSession();
-  }, [isDemoMode]);
-
-  // Register passkey
-  const registerPasskey = useCallback(async (username: string, displayName: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Begin registration
-      const beginRes = await fetch(`${API_BASE}/id/register/begin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, display_name: displayName }),
-      });
-
-      if (!beginRes.ok) {
-        throw new Error(await beginRes.text() || 'Registration failed');
-      }
-
-      const { challenge_id, options } = await beginRes.json();
-
-      // Create credential
-      const credential = await startRegistration(options);
-
-      // Finish registration
-      const finishRes = await fetch(`${API_BASE}/id/register/finish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge_id, attestation: credential }),
-      });
-
-      if (!finishRes.ok) {
-        throw new Error(await finishRes.text() || 'Registration failed');
-      }
-
-      const { sid } = await finishRes.json();
-      setIsLoading(false);
-      return { sid };
-    } catch (err: any) {
-      setError(err.message);
-      setIsLoading(false);
-      throw err;
-    }
-  }, []);
-
-  // Login with passkey
-  const loginWithPasskey = useCallback(async (username: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Begin authentication
-      const beginRes = await fetch(`${API_BASE}/id/login/begin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      });
-
-      if (!beginRes.ok) {
-        throw new Error(await beginRes.text() || 'User not found');
-      }
-
-      const { challenge_id, public_key } = await beginRes.json();
-
-      // Authenticate
-      const credential = await startAuthentication(public_key);
-
-      // Finish authentication
-      const finishRes = await fetch(`${API_BASE}/id/login/finish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge_id, credential }),
-      });
-
-      if (!finishRes.ok) {
-        throw new Error(await finishRes.text() || 'Authentication failed');
-      }
-
-      const { sid, session_token } = await finishRes.json();
-
-      localStorage.setItem('ubl_session_token', session_token);
-      setUser({
-        sid,
-        username,
-        displayName: username,
-        kind: 'person',
-      });
-      setIsLoading(false);
-      return { sid };
-    } catch (err: any) {
-      setError(err.message);
-      setIsLoading(false);
-      throw err;
-    }
-  }, []);
-
-  // Demo mode login
-  const loginDemo = useCallback(() => {
-    localStorage.setItem('ubl_demo_mode', 'true');
-    setUser({
-      sid: 'demo:user',
-      username: 'Demo User',
-      displayName: 'Demo User',
-      kind: 'demo',
-    });
-  }, []);
-
-  // Logout
-  const logout = useCallback(() => {
-    localStorage.removeItem('ubl_session_token');
-    localStorage.removeItem('ubl_demo_mode');
-    setUser(null);
-  }, []);
+  // Build context value
+  const value: AuthContextType = {
+    user: auth.user,
+    isAuthenticated: auth.isAuthenticated,
+    isLoading: auth.isLoading,
+    isDemoMode,
+    supportsWebAuthn: auth.supportsWebAuthn,
+    supportsPRF: auth.supportsPRF,
+    canSignClientSide: auth.canSignClientSide,
+    error: auth.error,
+    registerPasskey: auth.registerPasskey,
+    loginWithPasskey: auth.loginWithPasskey,
+    loginDemo: auth.loginDemo,
+    logout: auth.logout,
+    getPublicKeyForRegistration: auth.getPublicKeyForRegistration,
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        isDemoMode,
-        supportsWebAuthn,
-        error,
-        registerPasskey,
-        loginWithPasskey,
-        loginDemo,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

@@ -60,7 +60,7 @@ pub async fn begin_stepup(
 
     let mut passkeys = Vec::new();
     for cred in credentials {
-        if cred.credential_kind == "webauthn" {
+        if cred.credential_kind == "passkey" {
             let passkey: Passkey = serde_json::from_slice(&cred.public_key)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse passkey: {}", e)))?;
             passkeys.push(passkey);

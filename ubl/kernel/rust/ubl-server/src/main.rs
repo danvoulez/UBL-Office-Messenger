@@ -32,6 +32,7 @@ mod sse;
 mod id_db;
 mod id_routes;
 mod auth;
+mod identity;  // 🆕 New modular identity system
 mod rate_limit;
 mod metrics;
 mod otel_tracing;

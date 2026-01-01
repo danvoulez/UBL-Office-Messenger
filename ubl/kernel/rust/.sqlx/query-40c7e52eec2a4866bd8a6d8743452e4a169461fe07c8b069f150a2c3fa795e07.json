@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT audit_id, entity_id, session_id, job_id, trace_id,\n               event_type, event_data, created_at_ms\n        FROM office_audit_log\n        ORDER BY created_at_ms DESC\n        LIMIT $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "audit_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "session_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "job_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "trace_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "event_data",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at_ms",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "40c7e52eec2a4866bd8a6d8743452e4a169461fe07c8b069f150a2c3fa795e07"
+}

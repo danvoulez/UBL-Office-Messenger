@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO policy_definitions (policy_id, version, description, rules, default_deny)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (policy_id) DO UPDATE SET\n                version = EXCLUDED.version,\n                description = EXCLUDED.description,\n                rules = EXCLUDED.rules,\n                default_deny = EXCLUDED.default_deny,\n                updated_at = NOW()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c7ea5743a18610d8233a5feaa92a6bc6043ad4b8ece772b8551538e1a35b822"
+}

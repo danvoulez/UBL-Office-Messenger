@@ -1,10 +1,10 @@
 use sqlx::PgPool;
 use sqlx::Row;
-use uuid::Uuid;
 use crate::auth::session::{Session, SessionFlavor, SessionContext};
 
 pub async fn insert(pool: &PgPool, s: &Session) -> sqlx::Result<()> {
-    let sid_str = s.sid.to_string();
+    // sid is already a String (Sid type)
+    let sid_str = &s.sid;
     
     // Serialize context into scope for storage
     let scope_with_context = serde_json::json!({
@@ -42,13 +42,11 @@ pub async fn get_valid(pool: &PgPool, token: &str) -> sqlx::Result<Option<Sessio
 
     Ok(row.and_then(|r| {
         let token: String = r.get("token");
-        let sid_str: String = r.get("sid");
+        let sid: String = r.get("sid");  // SID is a string, not UUID
         let tenant_id: Option<String> = r.get("tenant_id");
         let flavor: String = r.get("flavor");
         let scope: serde_json::Value = r.get("scope");
         let exp_unix: Option<i64> = r.get("exp_unix");
-        
-        let sid = Uuid::parse_str(&sid_str).ok()?;
         
         // Extract context from scope (with fallback for legacy sessions)
         let context: SessionContext = scope.get("context")

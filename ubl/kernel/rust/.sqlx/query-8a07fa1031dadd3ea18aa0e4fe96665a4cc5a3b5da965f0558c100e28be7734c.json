@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO projection_presence (\n                tenant_id, entity_id, state, job_id, since, last_seen_at, last_event_hash\n            ) VALUES ($1, $2, $3, $4, $5, $5, $6)\n            ON CONFLICT (entity_id) DO UPDATE SET\n                state = EXCLUDED.state,\n                job_id = EXCLUDED.job_id,\n                since = CASE WHEN projection_presence.state != EXCLUDED.state \n                    THEN EXCLUDED.since ELSE projection_presence.since END,\n                last_seen_at = EXCLUDED.last_seen_at,\n                last_event_hash = EXCLUDED.last_event_hash\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a07fa1031dadd3ea18aa0e4fe96665a4cc5a3b5da965f0558c100e28be7734c"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_session (token, sid, session_id, flavor, scope, exp_unix, not_before, not_after)\n        VALUES ($1, $2, $3, 'stepup', '{\"role\":\"admin\"}', $4, $5, $6)\n        RETURNING session_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Int8",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2e830e5c1ed7f28c4bb03b94bd64975042ddf46e6ff8738157fc4cae72ab20a5"
+}

@@ -146,7 +146,8 @@ export function useAuth() {
       const { challenge_id, options } = await beginRes.json();
 
       // 2. Create credential with browser
-      const credential = await startRegistration(options);
+      // @simplewebauthn/browser v11 expects { optionsJSON: {...} }
+      const credential = await startRegistration({ optionsJSON: options.publicKey });
 
       // 3. Finish registration - send credential to server
       const finishRes = await fetch(`${API_BASE}/id/register/finish`, {
@@ -163,10 +164,28 @@ export function useAuth() {
         throw new Error(err || 'Failed to complete registration');
       }
 
-      const { sid } = await finishRes.json();
+      const { sid, session_token } = await finishRes.json();
       
-      setState(s => ({ ...s, isLoading: false }));
-      return { sid, username };
+      // Auto-login: save session token and set user state
+      if (session_token) {
+        localStorage.setItem('ubl_session_token', session_token);
+        setState({
+          user: {
+            sid,
+            username,
+            displayName,
+            kind: 'person',
+          },
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+          canSignClientSide: false, // PRF not available on registration
+        });
+      } else {
+        setState(s => ({ ...s, isLoading: false }));
+      }
+      
+      return { sid, username, sessionToken: session_token };
     } catch (err: any) {
       const message = err.message || 'Registration failed';
       setState(s => ({ ...s, isLoading: false, error: message }));
@@ -174,41 +193,57 @@ export function useAuth() {
     }
   }, []);
 
-  // Login with passkey
+  // Login with passkey - supports both username-first and discoverable (userless) flows
   const loginWithPasskey = useCallback(async (username: string) => {
     setState(s => ({ ...s, isLoading: true, error: null }));
 
     try {
+      const isDiscoverable = !username || username.trim() === '';
+      
       // 1. Begin authentication - get challenge from server
-      const beginRes = await fetch(`${API_BASE}/id/login/begin`, {
+      const beginEndpoint = isDiscoverable 
+        ? `${API_BASE}/id/login/discoverable/begin`
+        : `${API_BASE}/id/login/begin`;
+      
+      const beginRes = await fetch(beginEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
+        body: isDiscoverable ? '{}' : JSON.stringify({ username }),
       });
 
       if (!beginRes.ok) {
         const err = await beginRes.text();
-        throw new Error(err || 'User not found');
+        throw new Error(err || 'Failed to start authentication');
       }
 
-      const { challenge_id, public_key } = await beginRes.json();
+      const beginData = await beginRes.json();
+      const challenge_id = beginData.challenge_id;
+      
+      // Handle different response structures:
+      // - Regular login: { public_key: { challenge, rpId, ... } }
+      // - Discoverable: { public_key: { publicKey: { challenge, ... }, mediation } }
+      const public_key = beginData.public_key.publicKey || beginData.public_key;
 
-      // 2. Authenticate with browser + PRF extension (Fix #2)
-      // We use raw WebAuthn API to include PRF extension
+      // 2. Authenticate with browser + PRF extension
       const prfSalt = new TextEncoder().encode('ubl-ed25519-signing-v1');
       
       let credential: PublicKeyCredential | null = null;
       let prfResult: ArrayBuffer | null = null;
       
       try {
-        // Try with PRF extension first
+        // Build publicKey options - for discoverable, don't include allowCredentials
         const publicKeyOptions: PublicKeyCredentialRequestOptions = {
-          ...public_key,
           challenge: base64urlToArrayBuffer(public_key.challenge),
-          allowCredentials: public_key.allowCredentials?.map((c: any) => ({
-            ...c,
-            id: base64urlToArrayBuffer(c.id),
-          })),
+          rpId: public_key.rpId,
+          timeout: public_key.timeout,
+          userVerification: public_key.userVerification || 'preferred',
+          // Only include allowCredentials for username-first flow
+          ...(isDiscoverable ? {} : {
+            allowCredentials: public_key.allowCredentials?.map((c: any) => ({
+              ...c,
+              id: base64urlToArrayBuffer(c.id),
+            })),
+          }),
           extensions: {
             // @ts-ignore - PRF extension
             prf: {
@@ -234,7 +269,22 @@ export function useAuth() {
       } catch (prfError) {
         // Fallback to standard authentication without PRF
         console.warn('PRF extension failed, using standard auth:', prfError);
-        credential = await startAuthentication(public_key) as unknown as PublicKeyCredential;
+        
+        // For discoverable flow, we need to handle this differently
+        if (isDiscoverable) {
+          const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+            challenge: base64urlToArrayBuffer(public_key.challenge),
+            rpId: public_key.rpId,
+            timeout: public_key.timeout,
+            userVerification: public_key.userVerification || 'required',
+            // No allowCredentials for discoverable
+          };
+          credential = await navigator.credentials.get({
+            publicKey: publicKeyOptions,
+          }) as PublicKeyCredential;
+        } else {
+          credential = await startAuthentication(public_key) as unknown as PublicKeyCredential;
+        }
       }
 
       if (!credential) {
@@ -269,7 +319,11 @@ export function useAuth() {
       };
 
       // 5. Finish authentication - verify with server
-      const finishRes = await fetch(`${API_BASE}/id/login/finish`, {
+      const finishEndpoint = isDiscoverable
+        ? `${API_BASE}/id/login/discoverable/finish`
+        : `${API_BASE}/id/login/finish`;
+      
+      const finishRes = await fetch(finishEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,14 +339,31 @@ export function useAuth() {
 
       const { sid, session_token } = await finishRes.json();
 
+      // For discoverable flow, we don't have username upfront - fetch it
+      let displayUsername = username;
+      if (isDiscoverable) {
+        // Try to get display_name from whoami
+        try {
+          const whoamiRes = await fetch(`${API_BASE}/id/whoami`, {
+            headers: { Authorization: `Bearer ${session_token}` },
+          });
+          if (whoamiRes.ok) {
+            const whoami = await whoamiRes.json();
+            displayUsername = whoami.display_name || sid;
+          }
+        } catch {
+          displayUsername = sid; // Fallback to SID
+        }
+      }
+
       // Save session
       localStorage.setItem('ubl_session_token', session_token);
 
       setState({
         user: {
           sid,
-          username,
-          displayName: username,
+          username: displayUsername,
+          displayName: displayUsername,
           kind: 'person',
         },
         isAuthenticated: true,
@@ -301,7 +372,7 @@ export function useAuth() {
         canSignClientSide: canSign,
       });
 
-      return { sid, username, canSignClientSide: canSign };
+      return { sid, username: displayUsername, canSignClientSide: canSign };
     } catch (err: any) {
       const message = err.message || 'Login failed';
       setState(s => ({ ...s, isLoading: false, error: message }));

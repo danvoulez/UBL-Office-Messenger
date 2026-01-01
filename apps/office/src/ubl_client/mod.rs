@@ -1,7 +1,27 @@
 //! UBL Client Module
 //!
-//! HTTP client for interacting with UBL 2.0 ledger.
-//! Properly signs all commits using Ed25519.
+//! HTTP client for interacting with UBL 2.0 ledger and identity system.
+//! 
+//! ## Features
+//! 
+//! - **Ledger Operations**: Commit atoms with Ed25519 signatures
+//! - **ASC Validation**: Validate Authorization Scope Certificates (Phase 3)
+//! - **Session Validation**: Validate session tokens via /id/whoami (Phase 6)
+//! - **Event Streaming**: Subscribe to ledger events via SSE
+//!
+//! ## Usage
+//!
+//! ```rust,ignore
+//! let client = UblClient::with_generated_key("http://localhost:8080", "office", 30000);
+//! 
+//! // Validate ASC
+//! let asc = client.validate_asc("asc-123").await?;
+//! 
+//! // Validate session
+//! if let Some(session) = client.validate_session("ses_token").await? {
+//!     println!("User: {}", session.sid);
+//! }
+//! ```
 
 mod ledger;
 mod affordances;
@@ -509,6 +529,73 @@ impl UblClient {
             .map_err(|e| OfficeError::UblError(format!("Permit parse failed: {}", e)))
     }
 
+    /// Validate an ASC (Authorization Scope Certificate) via UBL Kernel
+    ///
+    /// Phase 3: Office calls UBL Kernel HTTP instead of direct DB access.
+    /// This is the canonical way to validate ASC tokens.
+    pub async fn validate_asc(&self, asc_id: &str) -> Result<AscValidation> {
+        let url = format!("{}/id/asc/{}/validate", self.endpoint, asc_id);
+
+        let resp = self.client.get(&url)
+            .send()
+            .await
+            .map_err(|e| OfficeError::UblError(format!("ASC validation request failed: {}", e)))?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(AscValidation {
+                valid: false,
+                asc_id: asc_id.to_string(),
+                owner_sid: None,
+                owner_kind: None,
+                containers: vec![],
+                intent_classes: vec![],
+                max_delta: None,
+                not_before: None,
+                not_after: None,
+                reason: Some("ASC not found".to_string()),
+            });
+        }
+
+        if !resp.status().is_success() {
+            let error_text = resp.text().await.unwrap_or_default();
+            return Err(OfficeError::UblError(format!("ASC validation failed: {}", error_text)));
+        }
+
+        resp.json().await
+            .map_err(|e| OfficeError::UblError(format!("ASC validation parse failed: {}", e)))
+    }
+
+    /// Validate a session token via UBL Kernel's /id/whoami endpoint
+    ///
+    /// Phase 6: Office validates sessions through UBL Kernel HTTP.
+    /// Returns SessionInfo if valid, None if invalid/expired.
+    pub async fn validate_session(&self, session_token: &str) -> Result<Option<SessionInfo>> {
+        let url = format!("{}/id/whoami", self.endpoint);
+
+        let resp = self.client.get(&url)
+            .header("Authorization", format!("Bearer {}", session_token))
+            .send()
+            .await
+            .map_err(|e| OfficeError::UblError(format!("Session validation request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+
+        let whoami: WhoamiResponse = resp.json().await
+            .map_err(|e| OfficeError::UblError(format!("Session validation parse failed: {}", e)))?;
+
+        if whoami.authenticated {
+            Ok(Some(SessionInfo {
+                sid: whoami.sid.unwrap_or_default(),
+                kind: whoami.kind.unwrap_or_else(|| "person".to_string()),
+                display_name: whoami.display_name,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Issue a command to the UBL (v1.1 endpoint)
     pub async fn issue_command(&self, command: &CommandEnvelope) -> Result<()> {
         let url = format!("{}/v1/commands/issue", self.endpoint);
@@ -565,6 +652,41 @@ struct HandoverResponse {
     content: String,
     session_id: String,
     created_at: DateTime<Utc>,
+}
+
+/// ASC Validation response from UBL Kernel
+/// Matches the ValidateAscResp struct in id_routes.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AscValidation {
+    pub valid: bool,
+    pub asc_id: String,
+    pub owner_sid: Option<String>,
+    pub owner_kind: Option<String>,
+    #[serde(default)]
+    pub containers: Vec<String>,
+    #[serde(default)]
+    pub intent_classes: Vec<String>,
+    pub max_delta: Option<i64>,
+    pub not_before: Option<i64>,
+    pub not_after: Option<i64>,
+    pub reason: Option<String>,
+}
+
+/// Session validation response from /id/whoami
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WhoamiResponse {
+    pub sid: Option<String>,
+    pub kind: Option<String>,
+    pub display_name: Option<String>,
+    pub authenticated: bool,
+}
+
+/// Validated session information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub sid: String,
+    pub kind: String,
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

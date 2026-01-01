@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO container_policies (container_id, policy_id)\n            VALUES ($1, $2)\n            ON CONFLICT (container_id) DO UPDATE SET\n                policy_id = EXCLUDED.policy_id,\n                updated_at = NOW()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6da0c82ca141d83bc5c7701f76df3c7ab98a91b3fc4abaab0aafd3a60b82bb82"
+}

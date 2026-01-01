@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE projection_messages\n            SET read_by = array_append(read_by, $2),\n                last_event_hash = $3, last_event_seq = $4\n            WHERE message_id = $1 AND NOT ($2 = ANY(read_by))\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81acebb25e5080576cb11e65fce29e2b435ccbe16554c7c53c72653716588d14"
+}

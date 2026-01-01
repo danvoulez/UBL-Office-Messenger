@@ -108,6 +108,22 @@ pub struct IssueAscResp {
     pub signature: String, // hex
 }
 
+/// Response for ASC validation endpoint
+#[derive(Debug, Serialize)]
+pub struct ValidateAscResp {
+    pub valid: bool,
+    pub asc_id: String,
+    pub owner_sid: String,
+    pub owner_kind: String,
+    pub containers: Vec<String>,
+    pub intent_classes: Vec<String>,
+    pub max_delta: i64,
+    pub not_before: String,
+    pub not_after: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RotateKeyReq {
     pub new_public_key: String, // hex
@@ -175,6 +191,7 @@ pub struct RegisterFinishReq {
 pub struct RegisterFinishResp {
     pub sid: String,
     pub username: String,
+    pub session_token: String,
 }
 
 // WebAuthn login begin
@@ -316,6 +333,63 @@ pub async fn route_issue_asc(
     }))
 }
 
+/// GET /id/asc/{asc_id}/validate - Validate an ASC (for Office to call)
+/// 
+/// This endpoint allows Office (and other services) to validate an ASC
+/// through the UBL Kernel instead of accessing the database directly.
+pub async fn route_validate_asc(
+    State(state): State<IdState>,
+    Path(asc_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<ValidateAscResp>, (StatusCode, String)> {
+    // 1. Parse ASC ID
+    let asc_uuid = Uuid::parse_str(&asc_id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid ASC ID format".to_string()))?;
+
+    // 2. Get ASC from database
+    let asc = id_db::get_asc_by_id(&state.pool, asc_uuid)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "ASC not found".to_string()))?;
+
+    // 3. Check expiration
+    let now = time::OffsetDateTime::now_utc();
+    let is_valid = asc.not_before <= now && asc.not_after >= now;
+
+    // 4. Get subject info for additional context
+    let subject = id_db::get_subject(&state.pool, &asc.sid)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 5. Extract scope details
+    let containers = asc.scopes.get("containers")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_else(Vec::new);
+    
+    let intent_classes = asc.scopes.get("intent_classes")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_else(Vec::new);
+    
+    let max_delta = asc.scopes.get("max_delta")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+
+    Ok(Json(ValidateAscResp {
+        valid: is_valid,
+        asc_id: asc.asc_id.to_string(),
+        owner_sid: asc.sid.clone(),
+        owner_kind: subject.map(|s| s.kind).unwrap_or_else(|| "unknown".to_string()),
+        containers,
+        intent_classes,
+        max_delta,
+        not_before: asc.not_before.to_string(),
+        not_after: asc.not_after.to_string(),
+        reason: if is_valid { None } else { Some("ASC expired".to_string()) },
+    }))
+}
+
 /// POST /id/agents/{sid}/rotate - Rotate agent key
 pub async fn route_rotate_key(
     State(state): State<IdState>,
@@ -448,9 +522,9 @@ pub async fn route_register_begin(
         return Err((StatusCode::CONFLICT, "Username already registered".to_string()));
     }
 
-    // 2. Create user ID (base64url of username)
+    // 2. Prepare display name
     let display_name = req.display_name.unwrap_or_else(|| req.username.clone());
-    let user_id = URL_SAFE_NO_PAD.encode(req.username.as_bytes());
+    // BUG FIX #2: Removed unused user_id variable
 
     // 3. Start passkey registration
     let (challenge_response, passkey_registration) = state.webauthn
@@ -466,11 +540,15 @@ pub async fn route_register_begin(
     let reg_state_bytes = serde_json::to_vec(&passkey_registration)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize state: {}", e)))?;
 
+    // BUG FIX #6: Use WEBAUTHN_ORIGIN from env
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    
     let challenge_id = id_db::create_register_challenge(
         &state.pool,
         &req.username, // Store username to retrieve in finish
         reg_state_bytes,
-        "http://localhost:8080", // TODO: use actual origin from env
+        &webauthn_origin,
         300, // 5 minutes TTL
     )
     .await
@@ -493,30 +571,22 @@ pub async fn route_register_finish(
     use tracing::{info, warn};
     let start = std::time::Instant::now();
     
-    // 1. Get challenge from database
-    let challenge = id_db::get_challenge(&state.pool, &req.challenge_id)
+    // Diamond Checklist #4: Consume challenge FIRST atomically (anti-replay)
+    let challenge_uuid = Uuid::parse_str(&req.challenge_id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
+    
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let challenge = id_db::consume_challenge(&state.pool, challenge_uuid, &webauthn_origin)
         .await
         .map_err(|e| {
-            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_not_found", latency_ms=start.elapsed().as_millis());
-            (StatusCode::BAD_REQUEST, "Challenge not found".to_string())
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="db_error", latency_ms=start.elapsed().as_millis());
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?
         .ok_or_else(|| {
-            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_not_found");
-            (StatusCode::BAD_REQUEST, "Challenge not found".to_string())
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_invalid_or_used", latency_ms=start.elapsed().as_millis());
+            (StatusCode::BAD_REQUEST, "Challenge not found, expired, or already used".to_string())
         })?;
-
-    if challenge.used {
-        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_used", latency_ms=start.elapsed().as_millis());
-        return Err((StatusCode::BAD_REQUEST, "Challenge already used".to_string()));
-    }
-
-    // Validate TTL with clock skew tolerance (±60s)
-    let now = time::OffsetDateTime::now_utc();
-    let clock_skew = time::Duration::seconds(60);
-    if now > challenge.expires_at + clock_skew {
-        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_expired", latency_ms=start.elapsed().as_millis());
-        return Err((StatusCode::BAD_REQUEST, "Challenge expired".to_string()));
-    }
 
     if challenge.kind != "register" {
         warn!(challenge_id=%req.challenge_id, decision="reject", error_code="invalid_challenge_kind", latency_ms=start.elapsed().as_millis());
@@ -555,7 +625,7 @@ pub async fn route_register_finish(
     id_db::create_credential(
         &state.pool,
         &sid,
-        "webauthn",
+        "passkey",
         &credential_id,
         &public_key_bytes,
         0, // initial sign_count
@@ -563,21 +633,25 @@ pub async fn route_register_finish(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 6. Mark challenge as used
-    let challenge_uuid = Uuid::parse_str(&req.challenge_id)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
+    // 6. Challenge already consumed at the start (anti-replay)
+
+    // 7. Create session for auto-login after registration
+    // SID is now a string type "ubl:sid:<hash>", used directly
+    let session = crate::auth::session::Session::new_regular(&sid);
+    let session_token = session.token.clone();
     
-    id_db::consume_challenge(&state.pool, challenge_uuid, "http://localhost:8080")
+    crate::auth::session_db::insert(&state.pool, &session)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
 
     crate::metrics::ID_DECISIONS.with_label_values(&["register", "accept", ""]).inc();
     crate::metrics::WEBAUTHN_OPS.with_label_values(&["register", "finish"]).inc();
-    info!(actor_type="person", username=%username, sid=%sid, challenge_id=%req.challenge_id, decision="accept", phase="finish", latency_ms=start.elapsed().as_millis());
+    info!(actor_type="person", username=%username, sid=%sid, session_token=%session_token, challenge_id=%req.challenge_id, decision="accept", phase="finish", latency_ms=start.elapsed().as_millis());
     
     Ok(Json(RegisterFinishResp {
         sid: sid.clone(),
         username,
+        session_token,
     }))
 }
 
@@ -626,7 +700,7 @@ pub async fn route_login_begin(
     // 3. Parse passkeys from credentials
     let mut passkeys = Vec::new();
     for cred in credentials {
-        if cred.credential_kind == "webauthn" {
+        if cred.credential_kind == "passkey" {
             let passkey: Passkey = serde_json::from_slice(&cred.public_key)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse passkey: {}", e)))?;
             passkeys.push(passkey);
@@ -646,11 +720,15 @@ pub async fn route_login_begin(
     let auth_state_bytes = serde_json::to_vec(&auth_state)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize auth state: {}", e)))?;
 
+    // BUG FIX #6: Use WEBAUTHN_ORIGIN from env
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    
     let challenge_id = id_db::create_login_challenge(
         &state.pool,
         &subject.sid,
         auth_state_bytes,
-        "http://localhost:8080", // TODO: use actual origin from env
+        &webauthn_origin,
         300, // 5 minutes TTL
     )
     .await
@@ -673,30 +751,23 @@ pub async fn route_login_finish(
     use tracing::{info, warn};
     let start = std::time::Instant::now();
     
-    // 1. Get challenge from database
-    let challenge = id_db::get_challenge(&state.pool, &req.challenge_id)
+    // Diamond Checklist #4: Consume challenge FIRST atomically (anti-replay)
+    // This UPDATE...WHERE used=false RETURNING ensures single-use
+    let challenge_uuid = Uuid::parse_str(&req.challenge_id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
+    
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let challenge = id_db::consume_challenge(&state.pool, challenge_uuid, &webauthn_origin)
         .await
         .map_err(|e| {
             warn!(challenge_id=%req.challenge_id, decision="reject", error_code="db_error", latency_ms=start.elapsed().as_millis());
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?
         .ok_or_else(|| {
-            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_not_found", latency_ms=start.elapsed().as_millis());
-            (StatusCode::BAD_REQUEST, "Challenge not found".to_string())
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_invalid_or_used", latency_ms=start.elapsed().as_millis());
+            (StatusCode::BAD_REQUEST, "Challenge not found, expired, or already used".to_string())
         })?;
-
-    if challenge.used {
-        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_used", latency_ms=start.elapsed().as_millis());
-        return Err((StatusCode::BAD_REQUEST, "Challenge already used".to_string()));
-    }
-
-    // Validate TTL with clock skew
-    let now = time::OffsetDateTime::now_utc();
-    let clock_skew = time::Duration::seconds(60);
-    if now > challenge.expires_at + clock_skew {
-        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_expired", latency_ms=start.elapsed().as_millis());
-        return Err((StatusCode::BAD_REQUEST, "Challenge expired".to_string()));
-    }
 
     if challenge.kind != "login" {
         warn!(challenge_id=%req.challenge_id, decision="reject", error_code="invalid_challenge_kind", latency_ms=start.elapsed().as_millis());
@@ -744,8 +815,13 @@ pub async fn route_login_finish(
         .ok_or_else(|| (StatusCode::NOT_FOUND, "Credential not found".to_string()))?;
 
     // 5. Validate sign_count (prevent replay attacks)
+    // Note: Some authenticators always return 0, and first login may have counter = 0
+    // Only reject if counter goes BACKWARDS (strict rollback detection)
     let new_counter = auth_result.counter();
-    if new_counter <= cred.sign_count as u32 {
+    let stored_counter = cred.sign_count as u32;
+    
+    // Reject only if counter decreased (not if stayed same on first use)
+    if new_counter < stored_counter || (stored_counter > 0 && new_counter == stored_counter) {
         let lockout_key = format!("login_lockout:{}", sid_str);
         state.rate_limiter.on_fail(&lockout_key);
         let fails = state.rate_limiter.get_failures(&lockout_key);
@@ -769,20 +845,12 @@ pub async fn route_login_finish(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 7. Mark challenge as used
-    let challenge_uuid = Uuid::parse_str(&req.challenge_id)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
-    
-    id_db::consume_challenge(&state.pool, challenge_uuid, "http://localhost:8080")
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // 7. Challenge already consumed at the start (anti-replay)
 
     // 8. Create session (using new Session module)
     let final_sid = challenge.sid.ok_or_else(|| 
         (StatusCode::INTERNAL_SERVER_ERROR, "Challenge has no SID".to_string())
     )?;
-    let final_sid_uuid = Uuid::parse_str(&final_sid)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Invalid SID format".to_string()))?;
     
     // 8.1 Get user's default tenant for Zona Schengen
     let user_tenant = tenant::db::get_user_tenant(&state.pool, &final_sid)
@@ -790,7 +858,8 @@ pub async fn route_login_finish(
         .ok()
         .flatten();
     
-    let session = Session::new_regular_with_tenant(final_sid_uuid, user_tenant);
+    // SID is now a string type "ubl:sid:<hash>", used directly
+    let session = Session::new_regular_with_tenant(&final_sid, user_tenant);
     session_db::insert(&state.pool, &session)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
@@ -810,6 +879,206 @@ pub async fn route_login_finish(
     
     let resp = Json(LoginFinishResp {
         sid: final_sid,
+        session_token: session.token.clone(),
+    });
+    
+    Ok((headers, resp))
+}
+
+// ============================================================================
+// DISCOVERABLE (USERLESS) LOGIN - for "Sign in with Passkey" button
+// ============================================================================
+
+/// POST /id/login/discoverable/begin - Begin discoverable (userless) WebAuthn login
+pub async fn route_login_discoverable_begin(
+    State(state): State<IdState>,
+) -> Result<Json<LoginBeginResp>, (StatusCode, String)> {
+    use tracing::info;
+    let start = std::time::Instant::now();
+    
+    // 1. Create discoverable authentication challenge (no username needed)
+    let (rcr, auth_state) = state.webauthn
+        .start_discoverable_authentication()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to start discoverable authentication: {:?}", e)))?;
+
+    // 2. Serialize the discoverable auth state
+    let auth_state_bytes = serde_json::to_vec(&auth_state)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize auth state: {}", e)))?;
+
+    // 3. Store challenge in database (no sid - NULL for discoverable flow)
+    // BUG FIX #6: Use WEBAUTHN_ORIGIN from env
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    
+    let challenge_id = id_db::create_discoverable_challenge(
+        &state.pool,
+        auth_state_bytes,
+        &webauthn_origin,
+        300, // 5 minutes TTL
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    crate::metrics::WEBAUTHN_OPS.with_label_values(&["login_discoverable", "begin"]).inc();
+    info!(actor_type="person", challenge_id=%challenge_id, decision="accept", phase="discoverable_login_begin", latency_ms=start.elapsed().as_millis());
+    
+    Ok(Json(LoginBeginResp {
+        challenge_id: challenge_id.to_string(),
+        public_key: rcr,
+    }))
+}
+
+/// POST /id/login/discoverable/finish - Finish discoverable WebAuthn login
+pub async fn route_login_discoverable_finish(
+    State(state): State<IdState>,
+    Json(req): Json<LoginFinishReq>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    use tracing::{info, warn};
+    let start = std::time::Instant::now();
+    
+    // Diamond Checklist #4: Consume challenge FIRST atomically (anti-replay)
+    let challenge_uuid = Uuid::parse_str(&req.challenge_id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
+    
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let challenge = id_db::consume_challenge(&state.pool, challenge_uuid, &webauthn_origin)
+        .await
+        .map_err(|e| {
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="db_error", latency_ms=start.elapsed().as_millis());
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?
+        .ok_or_else(|| {
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_invalid_or_used", latency_ms=start.elapsed().as_millis());
+            (StatusCode::BAD_REQUEST, "Challenge not found, expired, or already used".to_string())
+        })?;
+
+    // Validate origin from clientDataJSON
+    if let Ok(cdj) = parse_client_data_json(&req.credential.response.client_data_json) {
+        assert_origin(&cdj)?;
+    }
+
+    // 2. Extract credential_id from the assertion
+    // BUG FIX #1/#7: Don't use userHandle (UUID) as SID - look up credential by credential_id instead
+    let (_user_uuid, cred_id_bytes) = state.webauthn
+        .identify_discoverable_authentication(&req.credential)
+        .map_err(|e| {
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="identify_failed", latency_ms=start.elapsed().as_millis());
+            (StatusCode::UNAUTHORIZED, format!("Failed to identify user from credential: {:?}", e))
+        })?;
+    
+    let credential_id = URL_SAFE_NO_PAD.encode(cred_id_bytes);
+
+    // 3. BUG FIX: Look up credential by credential_id to get the REAL SID from database
+    let cred = id_db::get_credential_by_cred_id_only(&state.pool, &credential_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| {
+            warn!(challenge_id=%req.challenge_id, credential_id=%credential_id, decision="reject", error_code="credential_not_found", latency_ms=start.elapsed().as_millis());
+            (StatusCode::NOT_FOUND, "Credential not found".to_string())
+        })?;
+    
+    // Use the SID from the credential record (not the UUID from userHandle!)
+    let sid_str = cred.sid.clone();
+
+    // 4. Get the subject to verify they exist
+    let subject = id_db::get_subject(&state.pool, &sid_str)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| {
+            warn!(challenge_id=%req.challenge_id, sid=%sid_str, decision="reject", error_code="unknown_user", latency_ms=start.elapsed().as_millis());
+            (StatusCode::NOT_FOUND, "User not found".to_string())
+        })?;
+
+    if subject.kind != "person" {
+        return Err((StatusCode::BAD_REQUEST, "Not a person account".to_string()));
+    }
+
+    // 5. Parse the stored passkey and convert to DiscoverableKey
+    let passkey: Passkey = serde_json::from_slice(&cred.public_key)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse passkey: {}", e)))?;
+    let discoverable_key: DiscoverableKey = (&passkey).into();
+
+    // 6. Parse discoverable auth state and verify
+    let auth_state: DiscoverableAuthentication = serde_json::from_slice(&challenge.challenge)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Invalid auth state: {}", e)))?;
+
+    let auth_result = state.webauthn
+        .finish_discoverable_authentication(&req.credential, auth_state, &[discoverable_key])
+        .map_err(|e| {
+            let lockout_key = format!("login_lockout:{}", sid_str);
+            state.rate_limiter.on_fail(&lockout_key);
+            let fails = state.rate_limiter.get_failures(&lockout_key);
+            
+            if fails > 5 {
+                crate::metrics::LOCKOUT_ACTIVATIONS.with_label_values(&[&fails.to_string()]).inc();
+            }
+            
+            crate::metrics::ID_DECISIONS.with_label_values(&["login_discoverable", "reject", "auth_failed"]).inc();
+            warn!(challenge_id=%req.challenge_id, sid=%sid_str, decision="reject", error_code="auth_failed", 
+                  consecutive_failures=%fails, latency_ms=start.elapsed().as_millis());
+            (StatusCode::UNAUTHORIZED, format!("Authentication failed: {:?}", e))
+        })?;
+
+    // 7. Validate sign_count
+    // Note: Some authenticators always return 0, and first login may have counter = 0
+    // Only reject if counter goes BACKWARDS (strict rollback detection)
+    let new_counter = auth_result.counter();
+    let stored_counter = cred.sign_count as u32;
+    
+    // Reject only if counter decreased (not if stayed same on first use)
+    if new_counter < stored_counter || (stored_counter > 0 && new_counter == stored_counter) {
+        let lockout_key = format!("login_lockout:{}", sid_str);
+        state.rate_limiter.on_fail(&lockout_key);
+        let fails = state.rate_limiter.get_failures(&lockout_key);
+        
+        if fails > 5 {
+            crate::metrics::LOCKOUT_ACTIVATIONS.with_label_values(&[&fails.to_string()]).inc();
+        }
+        
+        crate::metrics::ID_DECISIONS.with_label_values(&["login_discoverable", "reject", "counter_rollback"]).inc();
+        warn!(challenge_id=%req.challenge_id, sid=%sid_str, decision="reject", error_code="counter_rollback", 
+              old_count=%cred.sign_count, new_count=%new_counter, consecutive_failures=%fails, latency_ms=start.elapsed().as_millis());
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Sign count did not increase - possible replay attack".to_string(),
+        ));
+    }
+
+    // 8. Update sign_count
+    id_db::update_sign_count(&state.pool, cred.id, new_counter as i64)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 9. Challenge already consumed at the start (anti-replay)
+
+    // 10. Create session
+    // SID is now a string type "ubl:sid:<hash>", used directly
+    let user_tenant = tenant::db::get_user_tenant(&state.pool, &sid_str)
+        .await
+        .ok()
+        .flatten();
+    
+    let session = Session::new_regular_with_tenant(&sid_str, user_tenant);
+    session_db::insert(&state.pool, &session)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
+
+    // 11. Set HttpOnly cookie
+    let mut headers = HeaderMap::new();
+    set_session_cookie(&mut headers, &session.token, session.ttl_secs());
+
+    // Reset failure counter on successful login
+    let lockout_key = format!("login_lockout:{}", sid_str);
+    state.rate_limiter.on_success(&lockout_key);
+
+    crate::metrics::ID_DECISIONS.with_label_values(&["login_discoverable", "accept", ""]).inc();
+    crate::metrics::WEBAUTHN_OPS.with_label_values(&["login_discoverable", "finish"]).inc();
+    info!(actor_type="person", sid=%sid_str, challenge_id=%req.challenge_id, session_token=%session.token, 
+          decision="accept", phase="discoverable_login_finish", sign_count=%new_counter, latency_ms=start.elapsed().as_millis());
+    
+    let resp = Json(LoginFinishResp {
+        sid: sid_str,
         session_token: session.token.clone(),
     });
     
@@ -910,7 +1179,7 @@ pub async fn route_stepup_begin(
 
     let mut passkeys = Vec::new();
     for cred in credentials {
-        if cred.credential_kind == "webauthn" {
+        if cred.credential_kind == "passkey" {
             let passkey: Passkey = serde_json::from_slice(&cred.public_key)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse passkey: {}", e)))?;
             passkeys.push(passkey);
@@ -918,7 +1187,7 @@ pub async fn route_stepup_begin(
     }
 
     if passkeys.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "No WebAuthn credentials found".to_string()));
+        return Err((StatusCode::BAD_REQUEST, "No passkey credentials found".to_string()));
     }
 
     // Create authentication challenge for step-up
@@ -1015,7 +1284,9 @@ pub async fn route_stepup_finish(
     let challenge_uuid = Uuid::parse_str(&req.challenge_id)
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
     
-    id_db::consume_challenge(&state.pool, challenge_uuid, "http://localhost:8080")
+    let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    id_db::consume_challenge(&state.pool, challenge_uuid, &webauthn_origin)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -1111,8 +1382,12 @@ pub fn id_router() -> Router<IdState> {
         .route("/id/register/finish", post(route_register_finish))
         .route("/id/login/begin", post(route_login_begin))
         .route("/id/login/finish", post(route_login_finish))
+        .route("/id/login/discoverable/begin", post(route_login_discoverable_begin))
+        .route("/id/login/discoverable/finish", post(route_login_discoverable_finish))
         .route("/id/stepup/begin", post(route_stepup_begin))
         .route("/id/stepup/finish", post(route_stepup_finish))
         .route("/id/sessions/ict/begin", post(route_ict_begin))
         .route("/id/sessions/ict/finish", post(route_ict_finish))
+        // 🆕 ASC validation endpoint (for Office to call instead of direct DB access)
+        .route("/id/asc/:asc_id/validate", get(route_validate_asc))
 }

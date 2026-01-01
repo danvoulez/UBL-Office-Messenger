@@ -486,7 +486,7 @@ async fn get_latest_handover(
 
     // Fix #9: Fetch latest handover from UBL ledger (authoritative source)
     let handover_content = state.ubl_client.get_last_handover(&entity_id).await
-        .map_err(|e| ApiError::InternalError(format!("Failed to fetch handover: {}", e)))?;
+        .map_err(|e| ApiError::Internal(format!("Failed to fetch handover: {}", e)))?;
 
     match handover_content {
         Some(content) => Ok(Json(serde_json::json!({

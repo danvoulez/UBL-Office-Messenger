@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_session (token, sid, session_id, flavor, scope, exp_unix, not_before, not_after)\n        VALUES ($1, $2, $3, 'user', '{}'::jsonb, $4, $5, $6)\n        RETURNING session_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Int8",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9c77c363ab23f149e755f6807eebaef9642e27cd2ede816a811ed3b02ad025df"
+}

@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_asc (sid, public_key, scopes, not_before, not_after, signature)\n        VALUES ($1, $2, $3, $4, $5, $6)\n        RETURNING asc_id, sid, public_key, scopes, not_before, not_after, signature\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "asc_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "public_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "scopes",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "not_before",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "not_after",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "signature",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fc5de71778e9a37b9620f079856c93a9d39ec9e4704e5e7fdf4535d6b0ce5f4c"
+}

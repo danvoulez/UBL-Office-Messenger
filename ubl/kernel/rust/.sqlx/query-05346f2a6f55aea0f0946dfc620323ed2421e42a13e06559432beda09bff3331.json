@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT 1 as exists_check\n                FROM ledger_atom la\n                JOIN ledger_entry le ON la.atom_hash = le.link_hash\n                WHERE le.container_id = 'C.Jobs'\n                  AND la.atom_data->>'type' = 'tool.called'\n                  AND la.atom_data->'payload'->>'tool_call_id' = $1\n                LIMIT 1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists_check",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "05346f2a6f55aea0f0946dfc620323ed2421e42a13e06559432beda09bff3331"
+}

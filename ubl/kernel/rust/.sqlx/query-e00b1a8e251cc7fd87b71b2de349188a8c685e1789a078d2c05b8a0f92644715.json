@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            la.container_id,\n            la.atom_hash,\n            la.atom_data,\n            le.entry_hash,\n            le.sequence\n        FROM ledger_atom la\n        JOIN ledger_entry le ON le.link_hash = la.atom_hash\n        ORDER BY le.container_id, le.sequence ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "container_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "atom_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "atom_data",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "entry_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "sequence",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e00b1a8e251cc7fd87b71b2de349188a8c685e1789a078d2c05b8a0f92644715"
+}

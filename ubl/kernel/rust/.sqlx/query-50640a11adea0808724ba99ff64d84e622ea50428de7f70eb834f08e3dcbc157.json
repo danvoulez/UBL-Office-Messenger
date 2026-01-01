@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO projection_presence (\n                tenant_id, entity_id, state, since, last_seen_at, last_event_hash\n            ) VALUES ($1, $2, 'available', $3, $3, $4)\n            ON CONFLICT (entity_id) DO UPDATE SET\n                last_seen_at = EXCLUDED.last_seen_at,\n                last_event_hash = EXCLUDED.last_event_hash\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "50640a11adea0808724ba99ff64d84e622ea50428de7f70eb834f08e3dcbc157"
+}

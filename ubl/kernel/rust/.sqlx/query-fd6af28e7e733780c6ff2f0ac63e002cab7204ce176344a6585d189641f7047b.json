@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, sid, credential_kind, credential_id, public_key, sign_count, key_version\n        FROM id_credential\n        WHERE sid = $1 AND credential_kind = $2\n        ORDER BY key_version DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "credential_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "credential_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "public_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "sign_count",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "key_version",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "fd6af28e7e733780c6ff2f0ac63e002cab7204ce176344a6585d189641f7047b"
+}

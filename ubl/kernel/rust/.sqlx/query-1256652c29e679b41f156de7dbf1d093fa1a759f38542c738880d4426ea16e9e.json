@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT timeline_item\n            FROM projection_job_events\n            WHERE tenant_id = $1 AND job_id = $2\n            ORDER BY ts DESC\n            LIMIT $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timeline_item",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1256652c29e679b41f156de7dbf1d093fa1a759f38542c738880d4426ea16e9e"
+}

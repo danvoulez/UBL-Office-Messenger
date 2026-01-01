@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_credential (sid, credential_kind, public_key, key_version)\n        VALUES ($1, 'ed25519', $2, $3)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a076684dc19dc544546890c1953e90234eeab5affb2f40a26d91783fc87162c2"
+}

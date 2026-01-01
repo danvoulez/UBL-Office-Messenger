@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE id_challenge\n            SET used = true\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb4dbeff8eb8be4e3f83a023211e2a7cf9b6aa6496442f245cfc3a7a9db014f7"
+}

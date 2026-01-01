@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_credential (sid, credential_kind, public_key, key_version)\n        VALUES ($1, 'ed25519', $2, 1)\n        ON CONFLICT (sid, credential_kind, key_version) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98fc7dc37dac86743f5c6232ef5c97b802f633e9999cb4a889bc02a1f8b45ad7"
+}

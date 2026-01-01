@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE id_session\n        SET not_after = $1\n        WHERE session_id = $2 AND flavor = 'ict'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "198f6465524b26e695c67effc5dcf5f08804964d4a44683d8373671a886fd889"
+}

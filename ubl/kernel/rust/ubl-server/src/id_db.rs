@@ -44,7 +44,7 @@ pub struct Credential {
     pub key_version: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Challenge {
     pub id: Uuid,
     pub kind: String,
@@ -54,6 +54,9 @@ pub struct Challenge {
     pub expires_at: OffsetDateTime,
     pub used: bool,
 }
+
+/// Alias for sqlx::FromRow compatibility
+type ChallengeRow = Challenge;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -154,17 +157,23 @@ pub async fn get_subject(pool: &PgPool, sid: &str) -> sqlx::Result<Option<Subjec
     }))
 }
 
+/// Compute the stable SID for a person from their username
+/// This MUST match the SID used in create_person()
+pub fn compute_person_sid(username: &str) -> String {
+    let mut h = Hasher::new();
+    h.update(username.as_bytes());
+    h.update(b"person");
+    format!("ubl:sid:{}", hex::encode(h.finalize().as_bytes()))
+}
+
 /// Create person subject (WebAuthn)
 pub async fn create_person(
     pool: &PgPool,
     username: &str,
     display_name: &str,
 ) -> sqlx::Result<String> {
-    // Compute stable SID from username
-    let mut h = Hasher::new();
-    h.update(username.as_bytes());
-    h.update(b"person");
-    let sid = format!("ubl:sid:{}", hex::encode(h.finalize().as_bytes()));
+    // Use the same SID computation
+    let sid = compute_person_sid(username);
 
     sqlx::query!(
         r#"
@@ -274,6 +283,33 @@ pub async fn get_credential_by_id(
         public_key: r.public_key,
         sign_count: r.sign_count.unwrap_or(0),
         key_version: r.key_version,
+    }))
+}
+
+/// Get credential by credential_id only (for discoverable login)
+pub async fn get_credential_by_cred_id_only(
+    pool: &PgPool,
+    credential_id: &str,
+) -> sqlx::Result<Option<Credential>> {
+    let row = sqlx::query_as::<_, (Uuid, String, String, Option<String>, Vec<u8>, Option<i64>, i32)>(
+        r#"
+        SELECT id, sid, credential_kind, credential_id, public_key, sign_count, key_version
+        FROM id_credential
+        WHERE credential_id = $1
+        "#
+    )
+    .bind(credential_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|(id, sid, kind, credential_id, public_key, sign_count, key_version)| Credential {
+        id,
+        sid,
+        credential_kind: kind,
+        credential_id,
+        public_key,
+        sign_count: sign_count.unwrap_or(0),
+        key_version,
     }))
 }
 
@@ -400,6 +436,33 @@ pub async fn create_login_challenge(
     Ok(row.id)
 }
 
+/// Create WebAuthn challenge for discoverable login (no SID known yet)
+pub async fn create_discoverable_challenge(
+    pool: &PgPool,
+    challenge_bytes: Vec<u8>,
+    origin: &str,
+    ttl_secs: i64,
+) -> sqlx::Result<Uuid> {
+    let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(ttl_secs);
+    let null_sid: Option<&str> = None;
+
+    let row = sqlx::query_as::<_, (Uuid,)>(
+        r#"
+        INSERT INTO id_challenge (kind, sid, challenge, origin, expires_at)
+        VALUES ('login', $1, $2, $3, $4)
+        RETURNING id
+        "#
+    )
+    .bind(null_sid)
+    .bind(challenge_bytes)
+    .bind(origin)
+    .bind(expires_at)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.0)
+}
+
 /// Create WebAuthn challenge for step-up
 pub async fn create_stepup_challenge(
     pool: &PgPool,
@@ -427,64 +490,47 @@ pub async fn create_stepup_challenge(
     Ok(row.id)
 }
 
-/// Get and mark challenge as used
+/// Atomically consume a challenge - prevents replay attacks (Diamond Checklist #4)
+/// 
+/// Uses UPDATE ... WHERE used = false RETURNING to ensure:
+/// 1. Challenge exists
+/// 2. Challenge not already used  
+/// 3. Atomic consumption (no race condition window)
+///
+/// If the challenge was already used or doesn't exist, returns Ok(None).
 pub async fn consume_challenge(
     pool: &PgPool,
     challenge_id: Uuid,
     expected_origin: &str,
 ) -> sqlx::Result<Option<Challenge>> {
-    let mut tx = pool.begin().await?;
-
-    // Get challenge
-    let row = sqlx::query!(
+    // Atomic UPDATE: only succeeds if used=false, sets used=true in same statement
+    // This eliminates the race condition window between check and update
+    // Uses raw query to avoid SQLX_OFFLINE cache issues
+    let row: Option<ChallengeRow> = sqlx::query_as(
         r#"
-        SELECT id, kind, sid, challenge, origin, expires_at, used
-        FROM id_challenge
-        WHERE id = $1
-        "#,
-        challenge_id
+        UPDATE id_challenge
+        SET used = true
+        WHERE id = $1 
+          AND used = false 
+          AND origin = $2
+          AND expires_at > NOW()
+        RETURNING id, kind, sid, challenge, origin, expires_at, used
+        "#
     )
-    .fetch_optional(&mut *tx)
+    .bind(challenge_id)
+    .bind(expected_origin)
+    .fetch_optional(pool)
     .await?;
 
-    if let Some(r) = row {
-        // Validate
-        if r.used {
-            return Ok(None); // Already used
-        }
-        if r.origin != expected_origin {
-            return Ok(None); // Origin mismatch
-        }
-        if OffsetDateTime::now_utc() > r.expires_at {
-            return Ok(None); // Expired
-        }
-
-        // Mark as used
-        sqlx::query!(
-            r#"
-            UPDATE id_challenge
-            SET used = true
-            WHERE id = $1
-            "#,
-            challenge_id
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-
-        Ok(Some(Challenge {
-            id: r.id,
-            kind: r.kind,
-            sid: r.sid,
-            challenge: r.challenge,
-            origin: r.origin,
-            expires_at: r.expires_at,
-            used: true,
-        }))
-    } else {
-        Ok(None)
-    }
+    Ok(row.map(|r| Challenge {
+        id: r.id,
+        kind: r.kind,
+        sid: r.sid,
+        challenge: r.challenge,
+        origin: r.origin,
+        expires_at: r.expires_at,
+        used: r.used,
+    }))
 }
 
 // ============================================================================
@@ -645,6 +691,30 @@ pub async fn get_active_asc(pool: &PgPool, sid: &str) -> sqlx::Result<Option<Asc
         "#,
         sid,
         now
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| Asc {
+        asc_id: r.asc_id,
+        sid: r.sid,
+        public_key: r.public_key,
+        scopes: r.scopes,
+        not_before: r.not_before,
+        not_after: r.not_after,
+        signature: r.signature,
+    }))
+}
+
+/// Get ASC by ID (for validation endpoint)
+pub async fn get_asc_by_id(pool: &PgPool, asc_id: Uuid) -> sqlx::Result<Option<Asc>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT asc_id, sid, public_key, scopes, not_before, not_after, signature
+        FROM id_asc
+        WHERE asc_id = $1
+        "#,
+        asc_id
     )
     .fetch_optional(pool)
     .await?;
@@ -825,30 +895,6 @@ pub async fn list_asc(pool: &PgPool, sid: &str) -> sqlx::Result<Vec<Asc>> {
             signature: r.signature,
         })
         .collect())
-}
-
-/// Get ASC by ID
-pub async fn get_asc_by_id(pool: &PgPool, asc_id: Uuid) -> sqlx::Result<Option<Asc>> {
-    let row = sqlx::query!(
-        r#"
-        SELECT asc_id, sid, public_key, scopes, not_before, not_after, signature
-        FROM id_asc
-        WHERE asc_id = $1
-        "#,
-        asc_id
-    )
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|r| Asc {
-        asc_id: r.asc_id,
-        sid: r.sid,
-        public_key: r.public_key,
-        scopes: r.scopes,
-        not_before: r.not_before,
-        not_after: r.not_after,
-        signature: r.signature,
-    }))
 }
 
 /// Revoke ASC (soft delete - mark as expired)

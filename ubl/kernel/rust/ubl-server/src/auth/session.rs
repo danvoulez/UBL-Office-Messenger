@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+/// Subject ID - string format "ubl:sid:<hash>" or legacy UUID
+pub type Sid = String;
+
 /// Zona Schengen Context - propagated context that doesn't require re-auth
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SessionContext {
@@ -20,7 +23,7 @@ pub struct SessionContext {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
     pub token: String,
-    pub sid: Uuid,
+    pub sid: Sid,  // Subject ID: "ubl:sid:<hash>" format
     pub tenant_id: Option<String>,  // Quick access (also in context)
     pub flavor: SessionFlavor,
     pub scope: serde_json::Value,   // Extended scope for flexibility
@@ -37,25 +40,26 @@ pub enum SessionFlavor {
 }
 
 impl Session {
-    pub fn new_regular(sid: Uuid) -> Self {
-        Self::new_with_context(sid, SessionFlavor::Regular, SessionContext::default())
+    pub fn new_regular(sid: impl Into<Sid>) -> Self {
+        Self::new_with_context(sid.into(), SessionFlavor::Regular, SessionContext::default())
     }
 
-    pub fn new_regular_with_tenant(sid: Uuid, tenant_id: Option<String>) -> Self {
+    pub fn new_regular_with_tenant(sid: impl Into<Sid>, tenant_id: Option<String>) -> Self {
         let ctx = SessionContext {
             tenant_id: tenant_id.clone(),
             ..Default::default()
         };
-        let mut session = Self::new_with_context(sid, SessionFlavor::Regular, ctx);
+        let mut session = Self::new_with_context(sid.into(), SessionFlavor::Regular, ctx);
         session.tenant_id = tenant_id;  // Also set top-level for quick access
         session
     }
 
-    pub fn new_stepup(sid: Uuid) -> Self {
-        Self::new_stepup_with_tenant(sid, None)
+    pub fn new_stepup(sid: impl Into<Sid>) -> Self {
+        Self::new_stepup_with_tenant(sid.into(), None)
     }
 
-    pub fn new_stepup_with_tenant(sid: Uuid, tenant_id: Option<String>) -> Self {
+    pub fn new_stepup_with_tenant(sid: impl Into<Sid>, tenant_id: Option<String>) -> Self {
+        let sid = sid.into();
         let ctx = SessionContext {
             tenant_id: tenant_id.clone(),
             role: Some("admin".to_string()),  // Step-up implies admin role
@@ -68,7 +72,7 @@ impl Session {
     }
 
     /// Create session with full context control
-    pub fn new_with_context(sid: Uuid, flavor: SessionFlavor, context: SessionContext) -> Self {
+    pub fn new_with_context(sid: Sid, flavor: SessionFlavor, context: SessionContext) -> Self {
         let exp = match flavor {
             SessionFlavor::Regular => OffsetDateTime::now_utc() + Duration::hours(1),
             SessionFlavor::StepUp => OffsetDateTime::now_utc() + Duration::minutes(10),

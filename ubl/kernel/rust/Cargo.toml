@@ -34,7 +34,7 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macro
 time = { version = "0.3", features = ["formatting", "macros", "serde"] }
 
 # WebAuthn
-webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"] }
 webauthn-rs-proto = "0.5"
 
 # Observability

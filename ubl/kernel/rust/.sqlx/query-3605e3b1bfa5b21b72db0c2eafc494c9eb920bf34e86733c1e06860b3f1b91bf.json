@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO projection_job_events (\n                tenant_id, job_id, cursor, ts, event_id, event_type,\n                actor_entity_id, timeline_item\n            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n            ON CONFLICT (tenant_id, job_id, cursor) DO UPDATE SET\n                timeline_item = EXCLUDED.timeline_item\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3605e3b1bfa5b21b72db0c2eafc494c9eb920bf34e86733c1e06860b3f1b91bf"
+}

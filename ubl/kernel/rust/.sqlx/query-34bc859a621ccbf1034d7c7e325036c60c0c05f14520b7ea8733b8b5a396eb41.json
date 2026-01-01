@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO id_credential (sid, credential_kind, credential_id, public_key, sign_count, key_version)\n        VALUES ($1, $2, $3, $4, $5, 1)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "34bc859a621ccbf1034d7c7e325036c60c0c05f14520b7ea8733b8b5a396eb41"
+}

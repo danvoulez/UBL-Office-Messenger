@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE id_asc\n        SET not_after = $1\n        WHERE asc_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c8cd23fdf5cb5e56d02459cece1d269a06a16897335ebe22f9661f75aefdaa3a"
+}

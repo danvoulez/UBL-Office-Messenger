@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT entity_id, name, entity_type, public_key, status,\n               constitution, baseline_narrative, \n               total_sessions, total_tokens_used,\n               created_at_ms, updated_at_ms\n        FROM office_entities\n        WHERE entity_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "public_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "constitution",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "baseline_narrative",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "total_sessions",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "total_tokens_used",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at_ms",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at_ms",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a20d79ccb67aaa4e667da93fe16c20c68fb5aa75a72d15b7d10b452cf3ed4b52"
+}

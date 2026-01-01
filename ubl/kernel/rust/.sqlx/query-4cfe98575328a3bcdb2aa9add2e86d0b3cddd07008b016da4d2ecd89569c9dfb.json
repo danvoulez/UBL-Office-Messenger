@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT session_id, entity_id, session_type, mode, token_budget,\n               tokens_used, duration_ms, status, started_at_ms, completed_at_ms\n        FROM office_sessions\n        WHERE entity_id = $1\n        ORDER BY started_at_ms DESC\n        LIMIT $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "session_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "mode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "token_budget",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "tokens_used",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_ms",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "started_at_ms",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "completed_at_ms",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4cfe98575328a3bcdb2aa9add2e86d0b3cddd07008b016da4d2ecd89569c9dfb"
+}

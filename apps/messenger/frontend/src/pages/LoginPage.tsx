@@ -1,21 +1,52 @@
 /**
  * Login Page - Simplified WebAuthn Passkey Authentication
  * Clean UBL Messenger branding
+ * 
+ * Phase 4: Now uses consolidated useAuthContext
  */
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Fingerprint, Loader2, Send } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { useAuthContext } from '../context/AuthContext';
+import { api } from '../services/apiClient';
 import toast from 'react-hot-toast';
+
+// API response type for tenant check
+interface TenantResponse {
+  tenant: {
+    tenant_id: string;
+    name: string;
+    slug: string;
+  };
+  role: string;
+}
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loginWithPasskey, registerPasskey, isLoading } = useAuth();
+  const { loginWithPasskey, registerPasskey, isLoading } = useAuthContext();
   
   const [email, setEmail] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+
+  // Check if user has tenant via API and localStorage
+  const checkAndNavigate = async () => {
+    try {
+      // Try to get tenant from API
+      const response = await api.get<TenantResponse>('/tenant');
+      
+      // User has tenant - save to localStorage and go to app
+      localStorage.setItem('ubl_tenant_id', response.tenant.tenant_id);
+      localStorage.setItem('ubl_tenant_name', response.tenant.name);
+      localStorage.setItem('ubl_tenant_role', response.role);
+      navigate('/');
+    } catch (err: any) {
+      // No tenant - go to onboarding
+      console.log('No tenant found, redirecting to onboarding');
+      navigate('/onboarding');
+    }
+  };
 
   // Login: usuário que já tem passkey
   const handlePasskeyLogin = async () => {
@@ -23,7 +54,8 @@ export const LoginPage: React.FC = () => {
       // WebAuthn permite login sem username - o browser mostra as passkeys disponíveis
       await loginWithPasskey('');
       toast.success('Welcome back!');
-      navigate('/');
+      // Check tenant status via API
+      await checkAndNavigate();
     } catch (err: any) {
       toast.error(err.message || 'Authentication failed');
     }
@@ -39,11 +71,17 @@ export const LoginPage: React.FC = () => {
     setIsRegistering(true);
     try {
       // Usa email como username e display name
-      await registerPasskey(email, email.split('@')[0]);
-      toast.success('Passkey created! Logging in...');
-      // Após registro, faz login automático
-      await loginWithPasskey(email);
-      navigate('/');
+      // registerPasskey agora faz auto-login e retorna sessionToken
+      const result = await registerPasskey(email, email.split('@')[0]) as { sid: string; username: string; sessionToken?: string };
+      
+      if (result.sessionToken) {
+        toast.success('Account created! Welcome!');
+        // New users always go to onboarding
+        navigate('/onboarding');
+      } else {
+        // Fallback: se não tiver session_token, precisa login manual
+        toast.success('Passkey created! Please sign in.');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Registration failed');
     } finally {

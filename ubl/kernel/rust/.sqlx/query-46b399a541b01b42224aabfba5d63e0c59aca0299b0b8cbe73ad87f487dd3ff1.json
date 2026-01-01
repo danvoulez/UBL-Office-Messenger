@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT sequence, entry_hash\n            FROM ledger_entry\n            WHERE container_id = $1\n            ORDER BY sequence DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "entry_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "46b399a541b01b42224aabfba5d63e0c59aca0299b0b8cbe73ad87f487dd3ff1"
+}

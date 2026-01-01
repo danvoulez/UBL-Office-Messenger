@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, sid, credential_kind as kind, credential_id, public_key, sign_count, key_version\n        FROM id_credential\n        WHERE sid = $1 AND NOT EXISTS (\n            SELECT 1 FROM id_key_revocation\n            WHERE id_key_revocation.sid = id_credential.sid\n            AND id_key_revocation.key_version = id_credential.key_version\n        )\n        ORDER BY key_version DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "credential_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "public_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "sign_count",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "key_version",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "470bab9cd0311846a2a81747c37e62938ce49081531503f528aa038c99e6a254"
+}

@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT approval_id, job_id, action, reason, requested_by, requested_at,\n                   status, decided_by, decided_at, decision, decision_reason,\n                   last_event_hash, last_event_seq\n            FROM projection_approvals\n            WHERE job_id = $1 AND status = 'pending'\n            ORDER BY requested_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "approval_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "job_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "action",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "requested_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "requested_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "decided_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "decided_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "decision",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "decision_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "last_event_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "last_event_seq",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "e0d4f173197ee994168e044fafbdb27ace268d6752d069611534fb646a45d9f7"
+}

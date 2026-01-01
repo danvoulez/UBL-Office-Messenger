@@ -18,14 +18,8 @@ export function getBaseUrl(): string {
 }
 
 function getToken(): string | null {
-  try {
-    const raw = localStorage.getItem('ubl_session');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.token || null;
-  } catch {
-    return null;
-  }
+  // Token is stored directly as string in ubl_session_token
+  return localStorage.getItem('ubl_session_token');
 }
 
 async function request<T>(
