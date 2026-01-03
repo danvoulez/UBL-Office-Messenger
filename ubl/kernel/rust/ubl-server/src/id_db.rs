@@ -967,3 +967,79 @@ pub async fn close_icte_session(pool: &PgPool, session_id: Uuid) -> sqlx::Result
 
     Ok(())
 }
+
+// ============================================================================
+// ATOMIC OPERATIONS (Diamond Checklist #4)
+// ============================================================================
+
+/// Diamond Checklist #4: Consume challenge and create session atomically
+/// This ensures challenge consumption and session creation happen in a single
+/// transaction, eliminating the race condition window for replay attacks.
+pub async fn consume_challenge_and_create_session(
+    pool: &PgPool,
+    challenge_id: Uuid,
+    expected_origin: &str,
+    session_token: &str,
+    sid: &str,
+    tenant_id: Option<&str>,
+    flavor: &str,
+    scope: &serde_json::Value,
+    exp_unix: i64,
+) -> sqlx::Result<Option<Challenge>> {
+    // Begin transaction
+    let mut tx = pool.begin().await?;
+    
+    // 1. Atomically consume challenge (UPDATE...WHERE used=false)
+    let challenge: Option<ChallengeRow> = sqlx::query_as(
+        r#"
+        UPDATE id_challenge
+        SET used = true
+        WHERE id = $1 
+          AND used = false 
+          AND origin = $2
+          AND expires_at > NOW()
+        RETURNING id, kind, sid, challenge, origin, expires_at, used
+        "#
+    )
+    .bind(challenge_id)
+    .bind(expected_origin)
+    .fetch_optional(&mut *tx)
+    .await?;
+    
+    if challenge.is_none() {
+        // Challenge not found or already used - rollback and return
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    
+    // 2. Create session in same transaction
+    sqlx::query(
+        r#"INSERT INTO id_session (token, sid, tenant_id, flavor, scope, exp_unix)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (token) DO UPDATE 
+           SET sid=$2, tenant_id=$3, flavor=$4, scope=$5, exp_unix=$6"#
+    )
+    .bind(session_token)
+    .bind(sid)
+    .bind(tenant_id)
+    .bind(flavor)
+    .bind(scope)
+    .bind(exp_unix)
+    .execute(&mut *tx)
+    .await?;
+    
+    // 3. Commit transaction
+    tx.commit().await?;
+    
+    // Convert to Challenge
+    let row = challenge.unwrap();
+    Ok(Some(Challenge {
+        id: row.id,
+        kind: row.kind,
+        sid: row.sid,
+        challenge: row.challenge,
+        origin: row.origin,
+        expires_at: row.expires_at,
+        used: row.used,
+    }))
+}

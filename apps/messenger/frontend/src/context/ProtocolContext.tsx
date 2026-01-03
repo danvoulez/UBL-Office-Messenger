@@ -187,7 +187,8 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       eventBus.emit(PROTOCOL_EVENTS.MESSAGE_SENT, { messageId: res.messageId, hash: res.hash });
     } catch (e: any) {
       console.error('[ProtocolContext] sendMessage failed', e);
-      setMessages(prev => prev.map(m => (m.id === optimisticId ? { ...m, status: 'failed', error: e.message } : m)));
+      // Diamond Checklist #9: Remove failed message from UI (rollback optimistic update)
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
       notify({ type: 'error', title: 'Send Failed', message: e.message || 'Message could not be broadcast.' });
     } finally {
       setIsSyncing(false);

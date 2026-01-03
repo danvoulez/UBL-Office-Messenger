@@ -24,6 +24,7 @@
 #![warn(missing_docs)]
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 
 /// SPEC 4: Intent Class
 /// The physical classification of an intent.
@@ -59,6 +60,10 @@ pub struct PactProof {
 /// SPEC 3: The Link Commit Structure
 /// This is what crosses the boundary Mind → Body.
 /// SPEC-UBL-LINK v1.0 §3
+/// 
+/// **CRITICAL FIX (Diamond Checklist #1):** physics_delta is serialized as string
+/// to prevent precision loss in JavaScript (i128 > 2^53 loses bits in JSON Number)
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkCommit {
     /// SPEC 3.2: Protocol version (must be 1)
@@ -79,7 +84,9 @@ pub struct LinkCommit {
     /// SPEC 3.2: Physical class of the intent
     pub intent_class: IntentClass,
     
-    /// SPEC 3.2: Physical delta (change in value) - i128 per spec
+    /// SPEC 3.2: Physical delta (change in value) - i128 internally, string in JSON
+    /// Serialized as string to prevent JS precision loss (Diamond Checklist #1)
+    #[serde_as(as = "DisplayFromStr")]
     pub physics_delta: i128,
     
     /// SPEC 3.2: Pact proof (optional)
@@ -194,5 +201,31 @@ mod tests {
         
         assert_eq!(parsed.container_id, commit.container_id);
         assert_eq!(parsed.physics_delta, commit.physics_delta);
+    }
+
+    #[test]
+    fn test_physics_delta_as_string_in_json() {
+        // Diamond Checklist #1: Verify physics_delta serializes as string
+        let commit = LinkCommit {
+            version: 1,
+            container_id: "test".to_string(),
+            expected_sequence: 1,
+            previous_hash: "prev".to_string(),
+            atom_hash: "atom".to_string(),
+            intent_class: IntentClass::Conservation,
+            physics_delta: 100_000_000_000_000_000_i128, // Large number > 2^53
+            author_pubkey: "pk".to_string(),
+            signature: "sig".to_string(),
+            pact: None,
+        };
+
+        let json = serde_json::to_string(&commit).unwrap();
+        
+        // Verify it's serialized as string, not number
+        assert!(json.contains("\"physics_delta\":\"100000000000000000\""));
+        
+        // Verify deserialization works
+        let parsed: LinkCommit = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.physics_delta, 100_000_000_000_000_000_i128);
     }
 }

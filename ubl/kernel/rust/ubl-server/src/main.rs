@@ -48,6 +48,7 @@ mod registry_v1;
 mod messenger_v1;
 mod messenger_gateway;
 mod policy;
+mod job_monitor; // Diamond Checklist #8: Job timeout monitor
 mod crypto;
 mod webauthn_store;
 mod keystore;
@@ -61,7 +62,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use db::{LedgerEntry, LinkDraft, PgLedger, TangencyError, PactProofDraft, PactSignatureDraft};
+use db::{LedgerEntry, LinkDraft, PgLedger, TangencyError};
 use serde::Serialize;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
@@ -185,40 +186,43 @@ async fn route_commit(
         link.expected_sequence, link.container_id, link.intent_class
     );
 
-    // ASC Validation (PR29)
-    if let Some(auth_header) = headers.get("authorization") {
-        let auth_str = auth_header.to_str().map_err(|_| {
-            (StatusCode::BAD_REQUEST, "Invalid authorization header".to_string())
+    // Diamond Checklist #5: ASC Validation - REQUIRED
+    // Extract authorization header (required for all commits)
+    let auth_header = headers.get("authorization")
+        .ok_or_else(|| {
+            error!("❌ MISSING ASC: No authorization header");
+            (StatusCode::UNAUTHORIZED, "Authorization header required for commits".to_string())
         })?;
+    
+    let auth_str = auth_header.to_str().map_err(|_| {
+        (StatusCode::BAD_REQUEST, "Invalid authorization header".to_string())
+    })?;
 
-        // Extract SID
-        let sid = auth::extract_sid_from_header(auth_str).map_err(|e| {
-            error!("❌ AUTH ERROR: {}", e.message());
-            (e.status_code(), e.message())
-        })?;
+    // Extract SID
+    let sid = auth::extract_sid_from_header(auth_str).map_err(|e| {
+        error!("❌ AUTH ERROR: {}", e.message());
+        (e.status_code(), e.message())
+    })?;
 
-        // Validate ASC
-        let asc_context = auth::validate_asc(&state.pool, &sid).await.map_err(|e| {
-            error!("❌ ASC VALIDATION FAILED: {}", e.message());
-            (e.status_code(), e.message())
-        })?;
+    // Validate ASC
+    let asc_context = auth::validate_asc(&state.pool, &sid).await.map_err(|e| {
+        error!("❌ ASC VALIDATION FAILED: {}", e.message());
+        (e.status_code(), e.message())
+    })?;
 
-        // Validate commit scopes
-        auth::validate_commit_scopes(
-            &asc_context,
-            &link.container_id,
-            &link.intent_class,
-            &link.physics_delta,
-        ).map_err(|e| {
-            error!("❌ SCOPE VIOLATION: {}", e.message());
-            (e.status_code(), e.message())
-        })?;
+    // Diamond Checklist #5: Validate commit against ASC scopes
+    // This enforces that containers can only be written to by authorized agents
+    auth::validate_commit_scopes(
+        &asc_context,
+        &link.container_id,
+        &link.intent_class,
+        &link.physics_delta,
+    ).map_err(|e| {
+        error!("❌ SCOPE VIOLATION: {}", e.message());
+        (e.status_code(), e.message())
+    })?;
 
-        info!("✅ ASC VALIDATED sid={} containers={:?}", sid, asc_context.containers);
-    } else {
-        // No ASC provided - allow for now (TODO: make required in production)
-        info!("⚠️  No ASC provided (dev mode - allowing)");
-    }
+    info!("✅ ASC VALIDATED sid={} containers={:?}", sid, asc_context.containers);
 
     // ========================================================================
     // SIGNATURE VERIFICATION (SPEC-UBL-MEMBRANE v1.0 §V2)
@@ -613,6 +617,16 @@ async fn main() -> anyhow::Result<()> {
         warn!("⚠️  Failed to load policies from database: {}. Using defaults.", e);
     }
     info!("📋 Policy engine initialized");
+
+    // Diamond Checklist #8: Start Job Monitor for orphaned jobs
+    let job_monitor = job_monitor::JobMonitor::new(
+        pool.clone(),
+        job_monitor::JobMonitorConfig::default()
+    );
+    tokio::spawn(async move {
+        job_monitor.run().await;
+    });
+    info!("🔍 Job Monitor started (checks for orphaned jobs every 60s)");
 
     // Create TailBus for SSE (simplified - only cid:seq)
     let tail_bus = sse::TailBus::new();
