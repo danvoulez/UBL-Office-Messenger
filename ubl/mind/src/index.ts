@@ -31,7 +31,8 @@ export interface LinkCommit {
   previous_hash: string;
   atom_hash: string;
   intent_class: IntentClass;
-  physics_delta: number;
+  /** Diamond Checklist #1: physics_delta as string to prevent JS precision loss */
+  physics_delta: string;
   author_pubkey: string;
   signature: string;
 }
@@ -134,6 +135,7 @@ export class Cortex {
 
   /**
    * Transform a semantic intent into a physical commit
+   * Diamond Checklist #1: physicsDelta is converted to string for JSON safety
    */
   async prepareCommit(
     intent: Intent,
@@ -155,7 +157,7 @@ export class Cortex {
       previous_hash: state.last_hash,
       atom_hash: atomHash,
       intent_class: intentClass,
-      physics_delta: physicsDelta,
+      physics_delta: physicsDelta.toString(), // Convert to string for JSON safety
       author_pubkey: this.config.authorPubkey,
       signature: 'mock', // Would sign in production
     };
