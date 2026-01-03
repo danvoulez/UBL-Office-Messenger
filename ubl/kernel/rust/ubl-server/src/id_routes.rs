@@ -751,23 +751,33 @@ pub async fn route_login_finish(
     use tracing::{info, warn};
     let start = std::time::Instant::now();
     
-    // Diamond Checklist #4: Consume challenge FIRST atomically (anti-replay)
-    // This UPDATE...WHERE used=false RETURNING ensures single-use
+    // Diamond Checklist #4: Parse challenge ID first
     let challenge_uuid = Uuid::parse_str(&req.challenge_id)
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid challenge ID".to_string()))?;
     
     let webauthn_origin = std::env::var("WEBAUTHN_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
-    let challenge = id_db::consume_challenge(&state.pool, challenge_uuid, &webauthn_origin)
+    
+    // Note: Challenge will be consumed atomically with session creation later
+    // First we need to validate the authentication
+    
+    // 1. Temporarily get challenge to extract auth state (without consuming yet)
+    let challenge = id_db::get_challenge(&state.pool, &req.challenge_id)
         .await
         .map_err(|e| {
             warn!(challenge_id=%req.challenge_id, decision="reject", error_code="db_error", latency_ms=start.elapsed().as_millis());
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?
         .ok_or_else(|| {
-            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_invalid_or_used", latency_ms=start.elapsed().as_millis());
-            (StatusCode::BAD_REQUEST, "Challenge not found, expired, or already used".to_string())
+            warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_not_found", latency_ms=start.elapsed().as_millis());
+            (StatusCode::BAD_REQUEST, "Challenge not found or expired".to_string())
         })?;
+    
+    // Check if challenge is already used
+    if challenge.used {
+        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_already_used", latency_ms=start.elapsed().as_millis());
+        return Err((StatusCode::BAD_REQUEST, "Challenge already used".to_string()));
+    }
 
     if challenge.kind != "login" {
         warn!(challenge_id=%req.challenge_id, decision="reject", error_code="invalid_challenge_kind", latency_ms=start.elapsed().as_millis());
@@ -847,7 +857,8 @@ pub async fn route_login_finish(
 
     // 7. Challenge already consumed at the start (anti-replay)
 
-    // 8. Create session (using new Session module)
+    // 8. Diamond Checklist #4: Atomically consume challenge and create session
+    // This prevents replay attacks by ensuring both operations succeed or fail together
     let final_sid = challenge.sid.ok_or_else(|| 
         (StatusCode::INTERNAL_SERVER_ERROR, "Challenge has no SID".to_string())
     )?;
@@ -858,11 +869,39 @@ pub async fn route_login_finish(
         .ok()
         .flatten();
     
-    // SID is now a string type "ubl:sid:<hash>", used directly
-    let session = Session::new_regular_with_tenant(&final_sid, user_tenant);
-    session_db::insert(&state.pool, &session)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
+    // 8.2 Prepare session data
+    let session = Session::new_regular_with_tenant(&final_sid, user_tenant.clone());
+    let scope_with_context = serde_json::json!({
+        "legacy": session.scope,
+        "context": session.context,
+    });
+    let flavor_str = match session.flavor {
+        SessionFlavor::Regular => "regular",
+        SessionFlavor::Stepup => "stepup",
+        _ => "regular",
+    };
+    
+    // 8.3 Atomically consume challenge and create session (Diamond Checklist #4)
+    let consumed_challenge = id_db::consume_challenge_and_create_session(
+        &state.pool,
+        challenge_uuid,
+        &webauthn_origin,
+        &session.token,
+        &final_sid,
+        user_tenant.as_deref(),
+        flavor_str,
+        &scope_with_context,
+        session.exp_unix,
+    )
+    .await
+    .map_err(|e| {
+        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="atomic_operation_failed", latency_ms=start.elapsed().as_millis());
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to consume challenge and create session: {}", e))
+    })?
+    .ok_or_else(|| {
+        warn!(challenge_id=%req.challenge_id, decision="reject", error_code="challenge_already_used", latency_ms=start.elapsed().as_millis());
+        (StatusCode::BAD_REQUEST, "Challenge already used or expired".to_string())
+    })?;
 
     // 9. Set HttpOnly cookie
     let mut headers = HeaderMap::new();
