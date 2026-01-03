@@ -48,6 +48,7 @@ mod registry_v1;
 mod messenger_v1;
 mod messenger_gateway;
 mod policy;
+mod job_monitor; // Diamond Checklist #8: Job timeout monitor
 mod crypto;
 mod webauthn_store;
 mod keystore;
@@ -61,7 +62,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use db::{LedgerEntry, LinkDraft, PgLedger, TangencyError, PactProofDraft, PactSignatureDraft};
+use db::{LedgerEntry, LinkDraft, PgLedger, TangencyError};
 use serde::Serialize;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
@@ -616,6 +617,16 @@ async fn main() -> anyhow::Result<()> {
         warn!("⚠️  Failed to load policies from database: {}. Using defaults.", e);
     }
     info!("📋 Policy engine initialized");
+
+    // Diamond Checklist #8: Start Job Monitor for orphaned jobs
+    let job_monitor = job_monitor::JobMonitor::new(
+        pool.clone(),
+        job_monitor::JobMonitorConfig::default()
+    );
+    tokio::spawn(async move {
+        job_monitor.run().await;
+    });
+    info!("🔍 Job Monitor started (checks for orphaned jobs every 60s)");
 
     // Create TailBus for SSE (simplified - only cid:seq)
     let tail_bus = sse::TailBus::new();
