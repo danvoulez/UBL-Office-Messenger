@@ -877,8 +877,7 @@ pub async fn route_login_finish(
     });
     let flavor_str = match session.flavor {
         SessionFlavor::Regular => "regular",
-        SessionFlavor::Stepup => "stepup",
-        _ => "regular",
+        SessionFlavor::StepUp => "stepup",
     };
     
     // 8.3 Atomically consume challenge and create session (Diamond Checklist #4)
