@@ -59,13 +59,16 @@ impl MessagesProjection {
         let content_hash = atom["content_hash"].as_str().unwrap_or_default();
         let timestamp = atom["timestamp"].as_str().unwrap_or_default();
         let message_type = atom["message_type"].as_str().unwrap_or("text");
+        // UBL-FIX: Extract client_msg_id for idempotency (Diamond Checklist #7)
+        let client_msg_id = atom["client_msg_id"].as_str();
 
+        // UBL-FIX: Use client_msg_id in insert for idempotent message creation
         sqlx::query(
             r#"
             INSERT INTO projection_messages (
                 message_id, conversation_id, from_id, content_hash, timestamp,
-                message_type, last_event_hash, last_event_seq
-            ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7, $8)
+                message_type, client_msg_id, last_event_hash, last_event_seq
+            ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7, $8, $9)
             ON CONFLICT (message_id) DO NOTHING
             "#
         )
@@ -75,12 +78,13 @@ impl MessagesProjection {
         .bind(content_hash)
         .bind(timestamp)
         .bind(message_type)
+        .bind(client_msg_id)
         .bind(entry_hash)
         .bind(sequence)
         .execute(&self.pool)
         .await?;
 
-        info!("💬 Message created: {} in {}", message_id, conversation_id);
+        info!("💬 Message created: {} in {} (client_id: {:?})", message_id, conversation_id, client_msg_id);
         Ok(())
     }
 

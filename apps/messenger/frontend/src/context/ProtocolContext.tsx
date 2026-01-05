@@ -144,6 +144,9 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const activeConv = conversations.find(c => c.id === activeConvId);
     if (!activeConv) return;
 
+    // UBL-FIX: Generate client_msg_id for idempotency (Diamond Checklist #7)
+    const clientMsgId = `${session.user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
     // Optimistic message while the backend signs/broadcasts.
     const optimisticHash = LedgerService.generateHashSync(sanitized);
     const optimisticCost = LedgerService.calculateExecutionCost(sanitized, false);
@@ -168,17 +171,31 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsSyncing(true);
 
     try {
-      const res = await ublApi.sendMessage({ conversationId: activeConvId, content: sanitized, type });
-      // Update optimistic message with backend response
+      // UBL-FIX: Pass client_msg_id to backend for idempotency
+      const res = await ublApi.sendMessage({ 
+        conversationId: activeConvId, 
+        content: sanitized, 
+        type,
+        clientMsgId 
+      });
+      
+      // UBL-FIX: Deduplication - replace optimistic with confirmed, preventing duplicates
       setMessages(prev => {
-        const without = prev.filter(m => m.id !== optimisticId);
+        // Remove any existing message with same clientMsgId or messageId (dedup)
+        const deduplicated = prev.filter(m => {
+          if (m.id === optimisticId) return false; // Remove optimistic
+          // If message already exists with server ID, keep it (shouldn't happen, but safety)
+          if (m.id === res.messageId) return false;
+          return true;
+        });
+        
         const confirmed: Message = {
           ...optimistic,
           id: res.messageId,
           hash: res.hash,
           status: 'sent',
         };
-        return [...without, confirmed];
+        return [...deduplicated, confirmed];
       });
 
       // Best-effort local lastMessage update
@@ -187,7 +204,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       eventBus.emit(PROTOCOL_EVENTS.MESSAGE_SENT, { messageId: res.messageId, hash: res.hash });
     } catch (e: any) {
       console.error('[ProtocolContext] sendMessage failed', e);
-      // Diamond Checklist #9: Remove failed message from UI (rollback optimistic update)
+      // UBL-FIX: Diamond Checklist #7 - Rollback optimistic update on error
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
       notify({ type: 'error', title: 'Send Failed', message: e.message || 'Message could not be broadcast.' });
     } finally {

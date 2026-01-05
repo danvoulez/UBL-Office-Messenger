@@ -206,11 +206,15 @@ export const ublApi = {
     conversationId: string; 
     content: string; 
     type?: MessageType;
+    // UBL-FIX: Add client_msg_id for idempotency (Diamond Checklist #7)
+    clientMsgId?: string;
   }): Promise<{ messageId: string; hash: string; sequence: number }> {
     const res = await api.post<SendMessageApiResponse>(`/messenger/messages`, {
       conversation_id: input.conversationId,
       content: input.content,
       message_type: input.type || 'text',
+      // UBL-FIX: Pass client_msg_id to backend for idempotency
+      client_msg_id: input.clientMsgId,
     });
     return { 
       messageId: res.message_id, 
