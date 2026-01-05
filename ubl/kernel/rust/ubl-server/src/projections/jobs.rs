@@ -144,13 +144,13 @@ impl JobsProjection {
         let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
         let now = time::OffsetDateTime::now_utc();
 
-        // Update old table
+        // Update old table (Diamond Checklist #2: causal ordering)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'running', started_at = $2::timestamptz,
                 last_event_hash = $3, last_event_seq = $4
-            WHERE job_id = $1
+            WHERE job_id = $1 AND last_event_seq < $4
             "#
         )
         .bind(job_id)
@@ -160,13 +160,13 @@ impl JobsProjection {
         .execute(&self.pool)
         .await;
 
-        // Update new table
+        // Update new table (Diamond Checklist #2: causal ordering)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'in_progress', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
-            WHERE tenant_id = $5 AND job_id = $1
+            WHERE tenant_id = $5 AND job_id = $1 AND last_event_seq < $4
             "#
         )
         .bind(job_id)
@@ -196,7 +196,7 @@ impl JobsProjection {
             UPDATE projection_jobs
             SET progress = $2, progress_message = $3,
                 last_event_hash = $4, last_event_seq = $5
-            WHERE job_id = $1
+            WHERE job_id = $1 AND last_event_seq < $5
             "#
         )
         .bind(job_id)
@@ -224,14 +224,14 @@ impl JobsProjection {
         let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
         let now = time::OffsetDateTime::now_utc();
 
-        // Update old table
+        // Update old table (Diamond Checklist #2)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'completed', completed_at = $2::timestamptz,
                 progress = 100, result_summary = $3, result_artifacts = $4,
                 last_event_hash = $5, last_event_seq = $6
-            WHERE job_id = $1
+            WHERE job_id = $1 AND last_event_seq < $6
             "#
         )
         .bind(job_id)
@@ -243,13 +243,13 @@ impl JobsProjection {
         .execute(&self.pool)
         .await;
 
-        // Update new table
+        // Update new table (Diamond Checklist #2)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'completed', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
-            WHERE tenant_id = $5 AND job_id = $1
+            WHERE tenant_id = $5 AND job_id = $1 AND last_event_seq < $4
             "#
         )
         .bind(job_id)
@@ -275,13 +275,13 @@ impl JobsProjection {
         let tenant_id = atom.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default");
         let now = time::OffsetDateTime::now_utc();
 
-        // Update old table
+        // Update old table (Diamond Checklist #2)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'cancelled', cancelled_at = $2::timestamptz,
                 last_event_hash = $3, last_event_seq = $4
-            WHERE job_id = $1
+            WHERE job_id = $1 AND last_event_seq < $4
             "#
         )
         .bind(job_id)
@@ -291,13 +291,13 @@ impl JobsProjection {
         .execute(&self.pool)
         .await;
 
-        // Update new table
+        // Update new table (Diamond Checklist #2)
         let _ = sqlx::query(
             r#"
             UPDATE projection_jobs
             SET state = 'cancelled', updated_at = $2, last_activity_at = $2,
                 last_event_hash = $3, last_event_seq = $4
-            WHERE tenant_id = $5 AND job_id = $1
+            WHERE tenant_id = $5 AND job_id = $1 AND last_event_seq < $4
             "#
         )
         .bind(job_id)
@@ -345,13 +345,13 @@ impl JobsProjection {
         .execute(&self.pool)
         .await?;
 
-        // Update job status
+        // Update job status (Diamond Checklist #2)
         sqlx::query(
             r#"
             UPDATE projection_jobs
             SET status = 'awaiting_approval',
                 last_event_hash = $2, last_event_seq = $3
-            WHERE job_id = $1
+            WHERE job_id = $1 AND last_event_seq < $3
             "#
         )
         .bind(job_id)
@@ -376,13 +376,14 @@ impl JobsProjection {
         let decision = atom["decision"].as_str().unwrap_or_default();
         let decision_reason = atom["reason"].as_str();
 
+        // Update approval (Diamond Checklist #2)
         sqlx::query(
             r#"
             UPDATE projection_approvals
             SET status = $2, decided_by = $3, decided_at = $4::timestamptz,
                 decision = $5, decision_reason = $6,
                 last_event_hash = $7, last_event_seq = $8
-            WHERE approval_id = $1
+            WHERE approval_id = $1 AND last_event_seq < $8
             "#
         )
         .bind(approval_id)
@@ -400,6 +401,7 @@ impl JobsProjection {
         // If rejected, update to cancelled
         let new_status = if decision == "approved" { "running" } else { "rejected" };
         
+        // Diamond Checklist #2: causal ordering with JOIN
         sqlx::query(
             r#"
             UPDATE projection_jobs
@@ -408,6 +410,7 @@ impl JobsProjection {
             WHERE projection_jobs.job_id = projection_approvals.job_id
               AND projection_approvals.approval_id = $1
               AND ($2 = 'approved' OR $2 = 'rejected')
+              AND projection_jobs.last_event_seq < $5
             "#
         )
         .bind(approval_id)

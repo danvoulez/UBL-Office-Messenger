@@ -93,18 +93,19 @@ impl MessagesProjection {
         let message_id = atom["message_id"].as_str().unwrap_or_default();
         let read_by = atom["read_by"].as_str().unwrap_or_default();
 
-        sqlx::query!(
+        // Diamond Checklist #2: causal ordering to prevent race conditions
+        sqlx::query(
             r#"
             UPDATE projection_messages
             SET read_by = array_append(read_by, $2),
                 last_event_hash = $3, last_event_seq = $4
-            WHERE message_id = $1 AND NOT ($2 = ANY(read_by))
-            "#,
-            message_id,
-            read_by,
-            entry_hash,
-            sequence
+            WHERE message_id = $1 AND NOT ($2 = ANY(read_by)) AND last_event_seq < $4
+            "#
         )
+        .bind(message_id)
+        .bind(read_by)
+        .bind(entry_hash)
+        .bind(sequence)
         .execute(&self.pool)
         .await?;
 
