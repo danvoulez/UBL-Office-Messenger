@@ -132,6 +132,9 @@ pub struct SendMessageRequest {
     pub content: String,
     #[serde(default = "default_message_type")]
     pub message_type: String,
+    // UBL-FIX: Add client_msg_id for idempotency (Diamond Checklist #7)
+    #[serde(default)]
+    pub client_msg_id: Option<String>,
 }
 
 fn default_message_type() -> String { "text".to_string() }
@@ -230,8 +233,10 @@ async fn send_message(
     // 4. Build canonical atom (SPEC-UBL-ATOM v1.0 compliant)
     // Keys MUST be sorted lexicographically
     // Fix #5: Include tenant_id for proper isolation
+    // UBL-FIX: Include client_msg_id for idempotency (Diamond Checklist #7)
     let tenant_id = user.tenant_id.as_deref().unwrap_or("default");
     let atom = serde_json::json!({
+        "client_msg_id": req.client_msg_id,
         "content_hash": content_hash,
         "conversation_id": req.conversation_id,
         "created_at": now_iso,
