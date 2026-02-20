@@ -13,7 +13,7 @@
   "dependencies": {
     "@noble/ed25519": "^2.0.0",
     "@noble/hashes": "^1.4.0",
-    "axios": "^1.7.7",
+    "axios": "^1.13.5",
     "big.js": "^6.2.1",
     "commander": "^11.1.0"
   },
